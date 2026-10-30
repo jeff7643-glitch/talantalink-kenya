@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,7 +21,6 @@ type IconName =
   | "comment"
   | "share"
   | "bookmark"
-  | "more"
   | "map"
   | "arrow"
   | "clock"
@@ -31,30 +30,34 @@ type IconName =
   | "close"
   | "external";
 
-type Section = "Home" | "My Network" | "Jobs" | "Messages" | "Investors" | "Ads";
+type Section = "Home" | "My Network" | "Jobs" | "Messages" | "Investors" | "Campaigns" | "Saved posts";
 type OpportunityType = "Job" | "Sponsorship" | "Collaboration";
 
 type Profile = {
   id: string;
   display_name: string;
   headline: string;
+  bio: string;
+  role: "talent" | "employer" | "recruiter" | "administrator";
+  onboardingComplete: boolean;
   countyId: number | null;
   countyName: string;
+  avatarUrl: string | null;
 };
 
 type Person = {
-  id?: string;
+  id: string;
   name: string;
   role: string;
   county: string;
   talent: string;
   initials: string;
   tone: string;
-  mutual: number;
+  avatarUrl?: string | null;
 };
 
 type Opportunity = {
-  id?: string;
+  id: string;
   company: string;
   title: string;
   detail: string;
@@ -63,22 +66,26 @@ type Opportunity = {
   tag: string;
   initials: string;
   tone: string;
+  verified: boolean;
+  ownerId: string;
   pay?: string;
   deadline: string;
+  deadlineAt?: string | null;
 };
 
 type FeedPost = {
-  id: string | number;
+  id: string;
+  userId: string;
   name: string;
   role: string;
   initials: string;
   tone: string;
-  time: string;
+  createdAt: string;
   text: string;
-  category: string;
   likes: number;
   comments: number;
-  art: string;
+  avatarUrl?: string | null;
+  imageUrl?: string | null;
 };
 
 type PostComment = {
@@ -86,10 +93,62 @@ type PostComment = {
   name: string;
   initials: string;
   text: string;
+  avatarUrl?: string | null;
+};
+
+type Conversation = {
+  userId: string;
+  name: string;
+  headline: string;
+  avatarUrl: string | null;
+  lastMessage: string;
+  lastMessageAt: string;
+  unread: number;
+};
+
+type DirectMessage = {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  content: string;
+  createdAt: string;
+};
+
+type Campaign = {
+  id: string;
+  companyId: string;
+  company: string;
+  title: string;
+  status: "draft" | "active" | "paused" | "ended";
+  budget: number | null;
+  impressions: number;
+  clicks: number;
+};
+
+type TalentOption = {
+  id: string;
+  name: string;
 };
 
 function getInitials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((part: string) => part[0]).join("").toUpperCase();
+}
+
+function formatRelativeTime(value: string) {
+  const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["year", 31_536_000_000],
+    ["month", 2_592_000_000],
+    ["week", 604_800_000],
+    ["day", 86_400_000],
+    ["hour", 3_600_000],
+    ["minute", 60_000],
+  ];
+  const formatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  for (const [unit, duration] of units) {
+    if (elapsed >= duration) return formatter.format(-Math.floor(elapsed / duration), unit);
+  }
+  return "Just now";
 }
 
 const counties = [
@@ -114,58 +173,14 @@ const countyIds = [
 
 const countyIdByName = new Map(countyIds.map((name, index) => [name, index + 1]));
 
-const people: Person[] = [
-  { name: "Wanjiku Njeri", role: "Illustrator & mural artist", county: "Nairobi", talent: "Visual arts", initials: "WN", tone: "rose", mutual: 12 },
-  { name: "Brian Kiptoo", role: "Middle-distance runner", county: "Uasin Gishu", talent: "Athletics", initials: "BK", tone: "green", mutual: 8 },
-  { name: "Amina Abdalla", role: "Taarab vocalist", county: "Mombasa", talent: "Music", initials: "AA", tone: "blue", mutual: 5 },
-  { name: "Kevin Ochieng", role: "Chess coach & player", county: "Kisumu", talent: "Board games", initials: "KO", tone: "gold", mutual: 4 },
-  { name: "Faith Chebet", role: "Documentary photographer", county: "Nakuru", talent: "Photography", initials: "FC", tone: "violet", mutual: 3 },
-  { name: "Juma Mwakio", role: "Wood carver & artisan", county: "Taita-Taveta", talent: "Craft", initials: "JM", tone: "orange", mutual: 2 },
-];
-
-const opportunities: Opportunity[] = [
-  { company: "Kifaru Athletics", title: "Community running ambassadors", detail: "Looking for runners to represent a new youth athletics programme.", type: "Sponsorship", county: "Nationwide", tag: "Athletics", initials: "KA", tone: "green", pay: "Stipend available", deadline: "Closes 18 Nov" },
-  { company: "Studio Sanaa", title: "Live mural artists", detail: "Create a collaborative public artwork for a community culture festival.", type: "Collaboration", county: "Nairobi", tag: "Visual arts", initials: "SS", tone: "violet", deadline: "Closes 24 Nov" },
-  { company: "Pwani Creative", title: "Event photographer", detail: "Capture a two-day arts and music gathering. Portfolio required.", type: "Job", county: "Mombasa", tag: "Photography", initials: "PC", tone: "blue", pay: "KES 18,000", deadline: "Closes 12 Nov" },
-  { company: "Lake Region Chess", title: "Junior chess coach", detail: "Coach beginner groups at weekend sessions across local schools.", type: "Job", county: "Kisumu", tag: "Board games", initials: "LR", tone: "gold", pay: "KES 2,500 / day", deadline: "Closes 30 Nov" },
-];
-
-const initialPosts: FeedPost[] = [
-  {
-    id: 1,
-    name: "Brian Kiptoo",
-    role: "Runner · Uasin Gishu",
-    initials: "BK",
-    tone: "green",
-    time: "2 hours ago",
-    text: "A personal best is never just a number. It is the early mornings, the people who show up, and the decision to keep going. Grateful for this team. 🏃🏾",
-    category: "Athletics",
-    likes: 48,
-    comments: 9,
-    art: "run",
-  },
-  {
-    id: 2,
-    name: "Wanjiku Njeri",
-    role: "Illustrator · Nairobi",
-    initials: "WN",
-    tone: "rose",
-    time: "Yesterday",
-    text: "Sketchbook to street wall. Sharing a few details from my latest neighbourhood mural — inspired by the plants and stories that make this block home.",
-    category: "Visual arts",
-    likes: 73,
-    comments: 14,
-    art: "mural",
-  },
-];
-
 const navItems: { label: Section; icon: IconName }[] = [
   { label: "Home", icon: "home" },
   { label: "My Network", icon: "users" },
   { label: "Jobs", icon: "briefcase" },
   { label: "Messages", icon: "message" },
   { label: "Investors", icon: "sparkles" },
-  { label: "Ads", icon: "chart" },
+  { label: "Campaigns", icon: "chart" },
+  { label: "Saved posts", icon: "bookmark" },
 ];
 
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
@@ -184,7 +199,6 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     comment: <><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z" /></>,
     share: <><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 10.7 6.8-4.4m-6.8 7 6.8 4.4" /></>,
     bookmark: <><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4V4Z" /></>,
-    more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
     map: <><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z" /><path d="M9 3v15m6-12v15" /></>,
     arrow: <><path d="M7 17 17 7M7 7h10v10" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
@@ -202,7 +216,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 }
 
 function Avatar({ initials, tone, size = "normal", image }: { initials: string; tone: string; size?: "normal" | "small" | "large"; image?: string }) {
-  return <div className={`avatar avatar-${tone} avatar-${size}`}>{image ? <Image className="avatar-image" src={image} alt="" width={40} height={40} /> : initials}</div>;
+  return <div className={`avatar avatar-${tone} avatar-${size}`}>{image ? <Image className="avatar-image" src={image} alt="" width={40} height={40} unoptimized /> : initials}</div>;
 }
 
 function SectionTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: ReactNode }) {
@@ -225,35 +239,55 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [county, setCounty] = useState("All counties");
   const [opportunityType, setOpportunityType] = useState("All types");
+  const [networkFilter, setNetworkFilter] = useState<"everyone" | "connected" | "incoming">("everyone");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [remotePeople, setRemotePeople] = useState<Person[] | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<Record<string, string>>({});
-  const [liked, setLiked] = useState<Array<string | number>>([]);
-  const [posts, setPosts] = useState<FeedPost[]>(initialPosts);
-  const [openComments, setOpenComments] = useState<string | number | null>(null);
+  const [liked, setLiked] = useState<string[]>([]);
+  const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentsByPost, setCommentsByPost] = useState<Record<string, PostComment[]>>({});
   const [commentDraft, setCommentDraft] = useState("");
   const [remoteOpportunities, setRemoteOpportunities] = useState<Opportunity[] | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [talentOptions, setTalentOptions] = useState<TalentOption[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [directMessages, setDirectMessages] = useState<DirectMessage[]>([]);
+  const [messageDraft, setMessageDraft] = useState("");
+  const [messageSearch, setMessageSearch] = useState("");
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [postText, setPostText] = useState("");
+  const [postImage, setPostImage] = useState<File | null>(null);
+  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
   const [postOpen, setPostOpen] = useState(false);
-  const [adOpen, setAdOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [opportunityOpen, setOpportunityOpen] = useState(false);
+  const [avatarImage, setAvatarImage] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [applied, setApplied] = useState<string[]>([]);
-  const [adActive, setAdActive] = useState(true);
-  const [messageSent, setMessageSent] = useState(false);
+  const [campaignOpen, setCampaignOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [dataError, setDataError] = useState("");
   const [loadingData, setLoadingData] = useState(false);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [clockTick, setClockTick] = useState(0);
   const loadVersion = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const avatarInput = useRef<HTMLInputElement>(null);
 
-  const visiblePeople = remotePeople ?? people;
-  const visibleOpportunities = remoteOpportunities ?? opportunities;
+  const visiblePeople = useMemo(() => remotePeople ?? [], [remotePeople]);
+  const visibleOpportunities = useMemo(() => remoteOpportunities ?? [], [remoteOpportunities]);
   const connectionCount = Object.values(connectionStatus).filter((status) => status === "connected").length;
   const invitationCount = Object.values(connectionStatus).filter((status) => status === "incoming").length;
+
+  useEffect(() => {
+    if (currentUserId && profile && !profile.onboardingComplete) router.replace("/onboarding");
+  }, [currentUserId, profile, router]);
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
@@ -267,6 +301,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const updateClock = () => setClockTick(Date.now());
+    updateClock();
+    const timer = window.setInterval(updateClock, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     if (!supabase) return;
 
     let active = true;
@@ -274,37 +315,54 @@ export default function Home() {
       const version = ++loadVersion.current;
       setPosts([]);
       setLiked([]);
+      setSavedPostIds([]);
       setCommentsByPost({});
       setOpenComments(null);
       setRemotePeople([]);
       setRemoteOpportunities([]);
+      setProfile(null);
+      setCampaigns([]);
+      setConversations([]);
+      setActiveConversationId(null);
+      setDirectMessages([]);
+      setApplied([]);
       setLoadingData(true);
       setDataError("");
       try {
-        const [countyResult, profileResult, connectionResult, postResult, opportunityResult] = await Promise.all([
+        const [countyResult, profileResult, connectionResult, postResult, opportunityResult, savedPostsResult, talentProfilesResult, talentOptionsResult] = await Promise.all([
           supabase.from("counties").select("id,name"),
           userId
-            ? supabase.from("profiles").select("id,display_name,headline,county_id").eq("id", userId).maybeSingle()
+            ? supabase.from("profiles").select("id,display_name,headline,bio,role,onboarding_complete,county_id,avatar_url").eq("id", userId).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
           userId
             ? supabase.from("connections").select("requester_id,receiver_id,status").or(`requester_id.eq.${userId},receiver_id.eq.${userId}`)
             : Promise.resolve({ data: [], error: null }),
-          supabase.from("posts").select("id,user_id,content,created_at").eq("is_published", true).order("created_at", { ascending: false }).limit(30),
-          supabase.from("opportunities").select("id,title,description,type,county_id,talent_id,compensation,deadline,companies(name),counties(name),talents(name)").eq("status", "published").order("created_at", { ascending: false }).limit(30),
+          supabase.from("posts").select("id,user_id,content,image_url,created_at").eq("is_published", true).order("created_at", { ascending: false }).limit(30),
+          supabase.from("opportunities").select("id,title,description,type,county_id,talent_id,compensation,deadline,companies(name,is_verified,owner_id),counties(name),talents(name)").eq("status", "published").order("created_at", { ascending: false }).limit(100),
+          userId
+            ? supabase.from("saved_posts").select("post_id").eq("user_id", userId)
+            : Promise.resolve({ data: [], error: null }),
+          supabase.from("talent_profiles").select("user_id,talents(name)"),
+          supabase.from("talents").select("id,name").order("name"),
         ]);
-        for (const result of [countyResult, profileResult, connectionResult, postResult, opportunityResult]) {
+        for (const result of [countyResult, profileResult, connectionResult, postResult, opportunityResult, savedPostsResult, talentProfilesResult, talentOptionsResult]) {
           if (result.error) throw result.error;
         }
         if (!active || version !== loadVersion.current) return;
 
         const countyNames = new Map((countyResult.data ?? []).map((entry) => [entry.id, entry.name]));
+        setTalentOptions(talentOptionsResult.data ?? []);
         if (profileResult.data) {
           setProfile({
             id: profileResult.data.id,
             display_name: profileResult.data.display_name,
             headline: profileResult.data.headline,
+            bio: profileResult.data.bio,
+            role: profileResult.data.role,
+            onboardingComplete: profileResult.data.onboarding_complete,
             countyId: profileResult.data.county_id,
             countyName: profileResult.data.county_id ? countyNames.get(profileResult.data.county_id) ?? "Kenya" : "Kenya",
+            avatarUrl: profileResult.data.avatar_url,
           });
         } else {
           setProfile(null);
@@ -320,13 +378,14 @@ export default function Home() {
               : connection.requester_id === userId ? "pending" : "incoming";
         }
         setConnectionStatus(statuses);
+        setSavedPostIds((savedPostsResult.data ?? []).map((entry) => entry.post_id));
 
         const feedRows = postResult.data ?? [];
         if (feedRows.length) {
           const postIds = feedRows.map((post) => post.id);
           const userIds = [...new Set(feedRows.map((post) => post.user_id))];
           const [profilesResult, likesResult, commentsResult] = await Promise.all([
-            supabase.from("profiles").select("id,display_name,headline,county_id").in("id", userIds),
+            supabase.from("profiles").select("id,display_name,headline,county_id,avatar_url").in("id", userIds),
             supabase.from("post_likes").select("post_id,user_id").in("post_id", postIds),
             supabase.from("comments").select("post_id").in("post_id", postIds),
           ]);
@@ -345,16 +404,17 @@ export default function Home() {
             const displayName = author?.display_name ?? "TalantaLink member";
             return {
               id: post.id,
+              userId: post.user_id,
               name: displayName,
               role: [author?.headline, author?.county_id ? countyNames.get(author.county_id) : null].filter(Boolean).join(" · ") || "TalantaLink community",
               initials: getInitials(displayName),
               tone: "green",
-              time: new Date(post.created_at).toLocaleDateString(),
+              createdAt: post.created_at,
               text: post.content,
-              category: "Community",
               likes: likeCounts.get(post.id) ?? 0,
               comments: commentCounts.get(post.id) ?? 0,
-              art: "",
+              avatarUrl: author?.avatar_url ?? null,
+              imageUrl: post.image_url,
             };
           }));
         } else {
@@ -362,19 +422,24 @@ export default function Home() {
           setLiked([]);
         }
 
-        const peopleQuery = supabase.from("profiles").select("id,display_name,headline,county_id");
+        const talentNames = new Map<string, string[]>();
+        for (const entry of talentProfilesResult.data ?? []) {
+          const talent = Array.isArray(entry.talents) ? entry.talents[0] : entry.talents;
+          if (talent?.name) talentNames.set(entry.user_id, [...(talentNames.get(entry.user_id) ?? []), talent.name]);
+        }
+        const peopleQuery = supabase.from("profiles").select("id,display_name,headline,county_id,avatar_url");
         const peopleResult = await (userId ? peopleQuery.neq("id", userId) : peopleQuery).limit(30);
         if (peopleResult.error) throw peopleResult.error;
         if (!active || version !== loadVersion.current) return;
         setRemotePeople((peopleResult.data ?? []).map((entry, index) => ({
           id: entry.id,
           name: entry.display_name,
-          role: entry.headline || "TalantaLink member",
+          role: entry.headline || talentNames.get(entry.id)?.join(", ") || "TalantaLink member",
           county: entry.county_id ? countyNames.get(entry.county_id) ?? "Kenya" : "Kenya",
-          talent: entry.headline || "Talent",
+          talent: talentNames.get(entry.id)?.join(", ") || entry.headline || "",
           initials: getInitials(entry.display_name),
           tone: ["green", "rose", "blue", "gold", "violet", "orange"][index % 6],
-          mutual: 0,
+          avatarUrl: entry.avatar_url,
         })));
 
         const mappedOpportunities = (opportunityResult.data ?? []).map((entry) => {
@@ -392,18 +457,60 @@ export default function Home() {
             tag: talent?.name ?? "All talents",
             initials: getInitials(companyName),
             tone: "green",
+            verified: company?.is_verified ?? false,
+            ownerId: company?.owner_id ?? "",
             pay: entry.compensation ?? undefined,
             deadline: entry.deadline ? `Closes ${new Date(entry.deadline).toLocaleDateString()}` : "Open",
+            deadlineAt: entry.deadline,
           };
         });
         setRemoteOpportunities(mappedOpportunities);
-        if (userId && mappedOpportunities.length) {
+        if (userId) {
           const { data: applicationRows, error: applicationError } = await supabase
             .from("applications").select("opportunity_id").eq("applicant_id", userId);
           if (applicationError) throw applicationError;
           if (active && version === loadVersion.current) setApplied((applicationRows ?? []).map((application) => application.opportunity_id));
         } else {
           setApplied([]);
+        }
+        if (userId) {
+          const { data: companyRows, error: companyError } = await supabase
+            .from("companies").select("id,name").eq("owner_id", userId);
+          if (companyError) throw companyError;
+          if (companyRows?.length) {
+            const companyById = new Map(companyRows.map((company) => [company.id, company.name]));
+            const { data: campaignRows, error: campaignError } = await supabase
+              .from("advertisements")
+              .select("id,company_id,title,status,budget")
+              .in("company_id", companyRows.map((company) => company.id))
+              .order("created_at", { ascending: false });
+            if (campaignError) throw campaignError;
+            const campaignIds = (campaignRows ?? []).map((campaign) => campaign.id);
+            const { data: eventRows, error: eventsError } = campaignIds.length
+              ? await supabase.from("advertisement_events").select("advertisement_id,event_type").in("advertisement_id", campaignIds)
+              : { data: [], error: null };
+            if (eventsError) throw eventsError;
+            const counts = new Map<string, { impressions: number; clicks: number }>();
+            for (const event of eventRows ?? []) {
+              const tally = counts.get(event.advertisement_id) ?? { impressions: 0, clicks: 0 };
+              if (event.event_type === "impression") tally.impressions += 1;
+              if (event.event_type === "click") tally.clicks += 1;
+              counts.set(event.advertisement_id, tally);
+            }
+            if (active && version === loadVersion.current) setCampaigns((campaignRows ?? []).map((campaign) => ({
+              id: campaign.id,
+              companyId: campaign.company_id,
+              company: companyById.get(campaign.company_id) ?? "Organisation",
+              title: campaign.title,
+              status: campaign.status,
+              budget: campaign.budget,
+              ...(counts.get(campaign.id) ?? { impressions: 0, clicks: 0 }),
+            })));
+          } else {
+            setCampaigns([]);
+          }
+        } else {
+          setCampaigns([]);
         }
       } catch (error) {
         if (active && version === loadVersion.current) setDataError(error instanceof Error ? error.message : "Could not load data from Supabase.");
@@ -436,31 +543,389 @@ export default function Home() {
     };
   }, [supabase]);
 
+  useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
+    let active = true;
+    const refreshPost = async (postId: string) => {
+      const { data: post, error: postError } = await supabase
+        .from("posts")
+        .select("id,user_id,content,image_url,created_at")
+        .eq("id", postId)
+        .eq("is_published", true)
+        .maybeSingle();
+      if (postError) {
+        if (active) setDataError(postError.message);
+        return;
+      }
+      if (!post) {
+        if (active) {
+          setPosts((current) => current.filter((entry) => entry.id !== postId));
+          setCommentsByPost((current) => {
+            const next = { ...current };
+            delete next[postId];
+            return next;
+          });
+        }
+        return;
+      }
+
+      const [authorResult, likesResult, commentsResult] = await Promise.all([
+        supabase.from("profiles").select("id,display_name,headline,avatar_url,county_id").eq("id", post.user_id).maybeSingle(),
+        supabase.from("post_likes").select("user_id", { count: "exact" }).eq("post_id", postId),
+        supabase.from("comments").select("id,user_id,content").eq("post_id", postId).order("created_at", { ascending: true }),
+      ]);
+      for (const result of [authorResult, likesResult, commentsResult]) {
+        if (result.error) {
+          if (active) setDataError(result.error.message);
+          return;
+        }
+      }
+      if (!active) return;
+
+      const author = authorResult.data;
+      const authorName = author?.display_name ?? "TalantaLink member";
+      const commentRows = commentsResult.data ?? [];
+      const authorIds = [...new Set([post.user_id, ...commentRows.map((comment) => comment.user_id)])];
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id,display_name,avatar_url")
+        .in("id", authorIds);
+      if (profilesError) {
+        if (active) setDataError(profilesError.message);
+        return;
+      }
+      if (!active) return;
+      const names = new Map((profiles ?? []).map((entry) => [entry.id, entry.display_name]));
+      const avatarUrls = new Map((profiles ?? []).map((entry) => [entry.id, entry.avatar_url]));
+      const countyName = author?.county_id ? countyIds[author.county_id - 1] : undefined;
+      const updatedPost: FeedPost = {
+        id: post.id,
+        userId: post.user_id,
+        name: authorName,
+        role: [author?.headline, countyName].filter(Boolean).join(" · ") || "TalantaLink community",
+        initials: getInitials(authorName),
+        tone: "green",
+        createdAt: post.created_at,
+        text: post.content,
+        likes: likesResult.count ?? 0,
+        comments: commentRows.length,
+        avatarUrl: author?.avatar_url ?? null,
+        imageUrl: post.image_url,
+      };
+      setPosts((current) => [updatedPost, ...current.filter((entry) => entry.id !== postId)]
+        .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+        .slice(0, 30));
+      setCommentsByPost((current) => ({
+        ...current,
+        [postId]: commentRows.map((comment) => {
+          const name = names.get(comment.user_id) ?? "TalantaLink member";
+          return { id: comment.id, name, initials: getInitials(name), text: comment.content, avatarUrl: avatarUrls.get(comment.user_id) ?? null };
+        }),
+      }));
+      setDataError("");
+    };
+
+    const channel = supabase
+      .channel("talantalink-community-feed")
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, (payload) => {
+        const newId = "id" in payload.new ? payload.new.id : null;
+        const oldId = "id" in payload.old ? payload.old.id : null;
+        const postId = String(newId ?? oldId ?? "");
+        if (postId) void refreshPost(postId);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, (payload) => {
+        const newPostId = "post_id" in payload.new ? payload.new.post_id : null;
+        const oldPostId = "post_id" in payload.old ? payload.old.post_id : null;
+        const postId = String(newPostId ?? oldPostId ?? "");
+        if (postId) void refreshPost(postId);
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "comments" }, (payload) => {
+        const postId = String(payload.new.post_id ?? "");
+        if (postId) void refreshPost(postId);
+      })
+      .subscribe((status) => {
+        if (!active) return;
+        setRealtimeConnected(status === "SUBSCRIBED");
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setDataError("Live feed updates are unavailable. Apply the Supabase Realtime migration and try again.");
+        }
+      });
+
+    return () => {
+      active = false;
+      setRealtimeConnected(false);
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
   const filteredPeople = useMemo(() => visiblePeople.filter((person) => {
     const matchesCounty = county === "All counties" || person.county === county;
     const matchesQuery = `${person.name} ${person.role} ${person.talent} ${person.county}`.toLowerCase().includes(query.toLowerCase());
-    return matchesCounty && matchesQuery;
-  }), [county, query, visiblePeople]);
+    const status = connectionStatus[person.id ?? person.name];
+    const matchesNetwork = networkFilter === "everyone"
+      || (networkFilter === "connected" && status === "connected")
+      || (networkFilter === "incoming" && status === "incoming");
+    return matchesCounty && matchesQuery && matchesNetwork;
+  }), [connectionStatus, county, networkFilter, query, visiblePeople]);
 
   const filteredOpportunities = useMemo(() => visibleOpportunities.filter((item) => {
     const matchesType = opportunityType === "All types" || item.type === opportunityType;
     const matchesCounty = county === "All counties" || item.county === county || item.county === "Nationwide";
     const matchesQuery = `${item.company} ${item.title} ${item.detail} ${item.tag} ${item.county}`.toLowerCase().includes(query.toLowerCase());
-    return matchesType && matchesCounty && matchesQuery;
-  }), [county, opportunityType, query, visibleOpportunities]);
+    const deadlineOpen = !item.deadlineAt || Date.parse(item.deadlineAt) > clockTick;
+    return matchesType && matchesCounty && matchesQuery && deadlineOpen;
+  }), [clockTick, county, opportunityType, query, visibleOpportunities]);
+  const visiblePosts = useMemo(() => {
+    const savedOnly = section === "Saved posts";
+    return posts.filter((post) => {
+      const matchesSaved = !savedOnly || savedPostIds.includes(post.id);
+      const matchesQuery = `${post.name} ${post.role} ${post.text}`.toLowerCase().includes(query.toLowerCase());
+      return matchesSaved && matchesQuery;
+    });
+  }, [posts, query, savedPostIds, section]);
+
+  const loadConversations = useCallback(async (active = true) => {
+    if (!supabase || !currentUserId) return;
+    const { data: rows, error } = await supabase.from("messages")
+      .select("id,sender_id,recipient_id,content,read_at,created_at")
+      .or(`sender_id.eq.${currentUserId},recipient_id.eq.${currentUserId}`)
+      .order("created_at", { ascending: false })
+      .limit(300);
+    if (error) {
+      if (active) setDataError(error.message);
+      return;
+    }
+    if (!active) return;
+    const participantIds = [...new Set((rows ?? []).map((row) => row.sender_id === currentUserId ? row.recipient_id : row.sender_id))];
+    if (!participantIds.length) {
+      setConversations([]);
+      return;
+    }
+    const { data: members, error: membersError } = await supabase.from("profiles")
+      .select("id,display_name,headline,avatar_url")
+      .in("id", participantIds);
+    if (membersError) {
+      if (active) setDataError(membersError.message);
+      return;
+    }
+    if (!active) return;
+    const membersById = new Map((members ?? []).map((member) => [member.id, member]));
+    const conversationsById = new Map<string, Conversation>();
+    for (const row of rows ?? []) {
+      const userId = row.sender_id === currentUserId ? row.recipient_id : row.sender_id;
+      const member = membersById.get(userId);
+      if (!member) continue;
+      const conversation = conversationsById.get(userId) ?? {
+        userId,
+        name: member.display_name,
+        headline: member.headline || "TalantaLink member",
+        avatarUrl: member.avatar_url,
+        lastMessage: row.content,
+        lastMessageAt: row.created_at,
+        unread: 0,
+      };
+      if (row.recipient_id === currentUserId && !row.read_at) conversation.unread += 1;
+      conversationsById.set(userId, conversation);
+    }
+    const nextConversations = [...conversationsById.values()];
+    setConversations(nextConversations);
+    setActiveConversationId((current) => current && nextConversations.some((item) => item.userId === current)
+      ? current
+      : nextConversations[0]?.userId ?? null);
+    setDataError("");
+  }, [currentUserId, supabase]);
+
+  const loadDirectMessages = useCallback(async (userId: string, active = true) => {
+    if (!supabase || !currentUserId) return;
+    setLoadingMessages(true);
+    const { data: rows, error } = await supabase.from("messages")
+      .select("id,sender_id,recipient_id,content,read_at,created_at")
+      .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${userId}),and(sender_id.eq.${userId},recipient_id.eq.${currentUserId})`)
+      .order("created_at", { ascending: true })
+      .limit(200);
+    if (error) {
+      if (active) setDataError(error.message);
+      if (active) setLoadingMessages(false);
+      return;
+    }
+    if (!active) return;
+    setDirectMessages((rows ?? []).map((row) => ({
+      id: row.id,
+      senderId: row.sender_id,
+      recipientId: row.recipient_id,
+      content: row.content,
+      createdAt: row.created_at,
+    })));
+    const unreadIds = (rows ?? []).filter((row) => row.recipient_id === currentUserId && !row.read_at).map((row) => row.id);
+    if (unreadIds.length) {
+      const { error: readError } = await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+      if (readError) setDataError(readError.message);
+      else void loadConversations(active);
+    }
+    setLoadingMessages(false);
+  }, [currentUserId, loadConversations, supabase]);
+
+  useEffect(() => {
+    if (!supabase || !currentUserId) return;
+
+    let active = true;
+    const refresh = async () => {
+      await loadConversations(active);
+      if (active && activeConversationId) await loadDirectMessages(activeConversationId, active);
+    };
+    void refresh();
+
+    const channel = supabase
+      .channel(`talantalink-messages-${currentUserId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
+        void refresh();
+      })
+      .subscribe((status) => {
+        if (active && (status === "CHANNEL_ERROR" || status === "TIMED_OUT")) {
+          setDataError("Live message updates are unavailable. Apply the latest Supabase migration.");
+        }
+      });
+
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, currentUserId, activeConversationId, loadConversations, loadDirectMessages]);
+
+  async function toggleSavedPost(postId: string) {
+    if (!supabase || !currentUserId) {
+      router.push("/auth");
+      return;
+    }
+    if (!["employer", "recruiter", "administrator"].includes(profile?.role ?? "")) {
+      setFeedback("Campaign drafts are available to employer and recruiter accounts.");
+      return;
+    }
+    const isSaved = savedPostIds.includes(postId);
+    setBusy(true);
+    try {
+      const result = isSaved
+        ? await supabase.from("saved_posts").delete().eq("user_id", currentUserId).eq("post_id", postId)
+        : await supabase.from("saved_posts").insert({ user_id: currentUserId, post_id: postId });
+      if (result.error) throw result.error;
+      setSavedPostIds((current) => isSaved ? current.filter((id) => id !== postId) : [...current, postId]);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not update saved posts.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sharePost(post: FeedPost) {
+    const url = `${window.location.origin}/?post=${encodeURIComponent(post.id)}`;
+    try {
+      if (navigator.share) await navigator.share({ title: `TalantaLink post by ${post.name}`, text: post.text, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        setFeedback("Post link copied.");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setFeedback(error instanceof Error ? error.message : "Could not share this post.");
+    }
+  }
+
+  async function removePost(post: FeedPost) {
+    if (!supabase || !currentUserId || post.userId !== currentUserId) return;
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("posts").delete().eq("id", post.id).eq("user_id", currentUserId);
+      if (error) throw error;
+      setPosts((current) => current.filter((entry) => entry.id !== post.id));
+      setSavedPostIds((current) => current.filter((id) => id !== post.id));
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not delete the post.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = messageDraft.trim();
+    if (!content || !activeConversationId) return;
+    if (!supabase || !currentUserId) {
+      router.push("/auth");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("messages").insert({
+        sender_id: currentUserId,
+        recipient_id: activeConversationId,
+        content,
+      });
+      if (error) throw error;
+      setMessageDraft("");
+      await Promise.all([loadConversations(), loadDirectMessages(activeConversationId)]);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not send this message.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function respondToConnection(person: Person, status: "accepted" | "rejected") {
+    if (!supabase || !currentUserId) {
+      router.push("/auth");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("connections").update({ status })
+        .eq("requester_id", person.id).eq("receiver_id", currentUserId).eq("status", "pending");
+      if (error) throw error;
+      setConnectionStatus((current) => ({ ...current, [person.id]: status === "accepted" ? "connected" : "declined" }));
+      if (status === "accepted") setFeedback(`You’re now connected with ${person.name}.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not respond to this request.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openConversation(person: Person) {
+    if (connectionStatus[person.id] !== "connected") return;
+    setActiveConversationId(person.id);
+    setSection("Messages");
+  }
+
+  function chooseAvatarImage(file?: File) {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(file.type)) {
+      setFeedback("Choose a JPEG, PNG, WebP or AVIF profile photo.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setFeedback("Choose a profile photo smaller than 5 MB.");
+      return;
+    }
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarImage(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    setFeedback("");
+  }
 
   async function toggleConnection(person: Person) {
     if (!supabase) {
-      const key = person.id ?? person.name;
-      setConnectionStatus((current) => current[key] === "pending"
-        ? Object.fromEntries(Object.entries(current).filter(([entry]) => entry !== key))
-        : { ...current, [key]: "pending" });
-      setFeedback("Demo connection request updated locally; sign in with Supabase to save it.");
+      setFeedback("Connect Supabase to send and manage real connection requests.");
       return;
     }
-    if (!person.id) return;
     if (!currentUserId) {
       router.push("/auth");
+      return;
+    }
+    if (profile?.role !== "talent") {
+      setFeedback("Only talent accounts can submit applications.");
       return;
     }
     setBusy(true);
@@ -472,9 +937,8 @@ export default function Home() {
         if (error) throw error;
         setConnectionStatus((current) => { const next = { ...current }; delete next[person.id!]; return next; });
       } else if (status === "incoming") {
-        const { error } = await supabase.from("connections").update({ status: "accepted" }).eq("requester_id", person.id).eq("receiver_id", currentUserId);
-        if (error) throw error;
-        setConnectionStatus((current) => ({ ...current, [person.id!]: "connected" }));
+        await respondToConnection(person, "accepted");
+        return;
       } else if (!status) {
         const { error } = await supabase.from("connections").insert({ requester_id: currentUserId, receiver_id: person.id });
         if (error) throw error;
@@ -495,71 +959,109 @@ export default function Home() {
     }
   }
 
+  function choosePostImage(file?: File) {
+    if (!file) return;
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+    if (!allowedTypes.includes(file.type)) {
+      setFeedback("Choose a JPEG, PNG, WebP or AVIF image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setFeedback("Choose an image smaller than 5 MB.");
+      return;
+    }
+    if (postImagePreview) URL.revokeObjectURL(postImagePreview);
+    setPostImage(file);
+    setPostImagePreview(URL.createObjectURL(file));
+    setPostOpen(true);
+    setFeedback("");
+  }
+
+  function clearPostImage() {
+    if (postImagePreview) URL.revokeObjectURL(postImagePreview);
+    setPostImage(null);
+    setPostImagePreview(null);
+    if (photoInput.current) photoInput.current.value = "";
+  }
+
   async function submitPost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = postText.trim();
-    if (!content) return;
-    if (supabase && !currentUserId) {
+    if (!content) {
+      setFeedback("Add a short caption before publishing your post.");
+      return;
+    }
+    if (!supabase) {
+      setFeedback("Connect Supabase to publish community updates.");
+      return;
+    }
+    if (!currentUserId) {
       router.push("/auth");
       return;
     }
-    if (supabase && currentUserId) {
+    if (currentUserId) {
       setBusy(true);
       setFeedback("");
+      let uploadedPath: string | null = null;
       try {
+        let imageUrl: string | null = null;
+        if (postImage) {
+          const extensionByType: Record<string, string> = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/avif": "avif",
+          };
+          const extension = extensionByType[postImage.type];
+          if (!extension) throw new Error("Choose a JPEG, PNG, WebP or AVIF image.");
+          uploadedPath = `${currentUserId}/${crypto.randomUUID()}.${extension}`;
+          const { error: uploadError } = await supabase.storage
+            .from("talantalink-posts")
+            .upload(uploadedPath, postImage, { contentType: postImage.type, cacheControl: "3600" });
+          if (uploadError) throw uploadError;
+          imageUrl = supabase.storage.from("talantalink-posts").getPublicUrl(uploadedPath).data.publicUrl;
+        }
         const { data: createdPost, error } = await supabase.from("posts")
-          .insert({ user_id: currentUserId, content }).select("id").single();
+          .insert({ user_id: currentUserId, content, image_url: imageUrl }).select("id,created_at").single();
         if (error) throw error;
         const displayName = profile?.display_name ?? "You";
         setPosts((current) => [{
           id: createdPost.id,
+          userId: currentUserId,
           name: displayName,
           role: [profile?.headline, profile?.countyName].filter(Boolean).join(" · ") || "TalantaLink community",
           initials: getInitials(displayName),
           tone: "green",
-          time: "Just now",
+          createdAt: createdPost.created_at,
           text: content,
-          category: "Community",
           likes: 0,
           comments: 0,
-          art: "",
+          avatarUrl: profile?.avatarUrl,
+          imageUrl,
         }, ...current]);
+        uploadedPath = null;
         setFeedback("Your post was published.");
       } catch (error) {
-        setFeedback(error instanceof Error ? error.message : "Could not publish your post.");
+        let message = error instanceof Error ? error.message : "Could not publish your post.";
+        if (uploadedPath) {
+          const { error: cleanupError } = await supabase.storage.from("talantalink-posts").remove([uploadedPath]);
+          if (cleanupError) message += ` The uploaded photo could not be removed: ${cleanupError.message}`;
+        }
+        setFeedback(message);
         setBusy(false);
         return;
       }
       setPostText("");
+      clearPostImage();
       setPostOpen(false);
       setBusy(false);
       return;
     }
-    setPosts((current) => [{
-      id: Date.now(),
-      name: "Alex Ouma",
-      role: "Dancer & choreographer · Nairobi",
-      initials: "AO",
-      tone: "orange",
-      time: "Just now",
-      text: content,
-      category: "Community",
-      likes: 0,
-      comments: 0,
-      art: "",
-    }, ...current]);
-    setPostText("");
-    setPostOpen(false);
   }
 
-  function submitAd(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setAdOpen(false);
-  }
-
-  async function toggleLike(postId: string | number) {
-    if (!supabase || typeof postId === "number") {
-      setLiked((current) => current.includes(postId) ? current.filter((id) => id !== postId) : [...current, postId]);
+  async function toggleLike(postId: string) {
+    if (!supabase) {
+      setFeedback("Connect Supabase to appreciate community posts.");
       return;
     }
     if (!currentUserId) {
@@ -582,25 +1084,26 @@ export default function Home() {
     }
   }
 
-  async function showComments(postId: string | number) {
+  async function showComments(postId: string) {
     setOpenComments((current) => current === postId ? null : postId);
     setCommentDraft("");
-    if (!supabase || typeof postId === "number" || commentsByPost[String(postId)]) return;
+    if (!supabase || commentsByPost[postId]) return;
     try {
       const { data: commentRows, error } = await supabase.from("comments")
         .select("id,user_id,content").eq("post_id", postId).order("created_at", { ascending: true });
       if (error) throw error;
       const userIds = [...new Set((commentRows ?? []).map((comment) => comment.user_id))];
       const { data: authors, error: authorError } = userIds.length
-        ? await supabase.from("profiles").select("id,display_name").in("id", userIds)
+        ? await supabase.from("profiles").select("id,display_name,avatar_url").in("id", userIds)
         : { data: [], error: null };
       if (authorError) throw authorError;
-      const names = new Map((authors ?? []).map((author) => [author.id, author.display_name]));
+      const authorsById = new Map((authors ?? []).map((author) => [author.id, author]));
       setCommentsByPost((current) => ({
         ...current,
-        [String(postId)]: (commentRows ?? []).map((comment) => {
-          const name = names.get(comment.user_id) ?? "TalantaLink member";
-          return { id: comment.id, name, initials: getInitials(name), text: comment.content };
+        [postId]: (commentRows ?? []).map((comment) => {
+          const author = authorsById.get(comment.user_id);
+          const name = author?.display_name ?? "TalantaLink member";
+          return { id: comment.id, name, initials: getInitials(name), text: comment.content, avatarUrl: author?.avatar_url ?? null };
         }),
       }));
     } catch (error) {
@@ -608,12 +1111,12 @@ export default function Home() {
     }
   }
 
-  async function submitComment(event: FormEvent<HTMLFormElement>, postId: string | number) {
+  async function submitComment(event: FormEvent<HTMLFormElement>, postId: string) {
     event.preventDefault();
     const content = commentDraft.trim();
     if (!content) return;
-    if (!supabase || typeof postId === "number") {
-      setFeedback("Comments on demo posts aren’t saved.");
+    if (!supabase) {
+      setFeedback("Connect Supabase to comment on community posts.");
       return;
     }
     if (!currentUserId) {
@@ -630,7 +1133,7 @@ export default function Home() {
       const name = profile?.display_name ?? "You";
       setCommentsByPost((current) => ({
         ...current,
-        [String(postId)]: [...(current[String(postId)] ?? []), { id: data.id, name, initials: getInitials(name), text: content }],
+        [postId]: [...(current[postId] ?? []), { id: data.id, name, initials: getInitials(name), text: content, avatarUrl: profile?.avatarUrl }],
       }));
       setPosts((current) => current.map((post) => post.id === postId ? { ...post, comments: post.comments + 1 } : post));
       setCommentDraft("");
@@ -649,40 +1152,79 @@ export default function Home() {
 
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (supabase && !currentUserId) {
+    if (!supabase) {
+      setFeedback("Connect Supabase to create and save a member profile.");
+      return;
+    }
+    if (!currentUserId) {
       router.push("/auth");
       return;
     }
     const formData = new FormData(event.currentTarget);
     const displayName = String(formData.get("displayName") ?? "").trim();
     const headline = String(formData.get("headline") ?? "").trim();
+    const bio = String(formData.get("bio") ?? "").trim();
     const countyValue = String(formData.get("county") ?? "");
     const countyId = countyIdByName.get(countyValue) ?? null;
     if (!displayName) return;
 
-    if (supabase && currentUserId) {
+    if (currentUserId) {
       setBusy(true);
       setFeedback("");
+      let avatarPath: string | null = null;
       try {
+        let avatarUrl = profile?.avatarUrl ?? null;
+        if (avatarImage) {
+          const extensionByType: Record<string, string> = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/avif": "avif",
+          };
+          const extension = extensionByType[avatarImage.type];
+          if (!extension) throw new Error("Choose a JPEG, PNG, WebP or AVIF profile photo.");
+          avatarPath = `${currentUserId}/${crypto.randomUUID()}.${extension}`;
+          const { error: uploadError } = await supabase.storage.from("talantalink-avatars")
+            .upload(avatarPath, avatarImage, { contentType: avatarImage.type, cacheControl: "3600" });
+          if (uploadError) throw uploadError;
+          avatarUrl = supabase.storage.from("talantalink-avatars").getPublicUrl(avatarPath).data.publicUrl;
+        }
         const { error } = await supabase.from("profiles")
-          .update({ display_name: displayName, headline, county_id: countyId })
+          .update({ display_name: displayName, headline, bio, county_id: countyId, avatar_url: avatarUrl })
           .eq("id", currentUserId);
         if (error) throw error;
         const countyName = countyId ? countyIds[countyId - 1] ?? "Kenya" : "Kenya";
-        setProfile({ id: currentUserId, display_name: displayName, headline, countyId, countyName });
+        setProfile({
+          id: currentUserId,
+          display_name: displayName,
+          headline,
+          bio,
+          role: profile?.role ?? "talent",
+          onboardingComplete: profile?.onboardingComplete ?? false,
+          countyId,
+          countyName,
+          avatarUrl,
+        });
+        avatarPath = null;
+        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+        setAvatarPreview(null);
+        setAvatarImage(null);
+        if (avatarInput.current) avatarInput.current.value = "";
         setFeedback("Profile updated.");
         setProfileOpen(false);
       } catch (error) {
-        setFeedback(error instanceof Error ? error.message : "Could not update your profile.");
+        let message = error instanceof Error ? error.message : "Could not update your profile.";
+        if (avatarPath) {
+          const { error: cleanupError } = await supabase.storage.from("talantalink-avatars").remove([avatarPath]);
+          if (cleanupError) message += ` The uploaded profile photo could not be removed: ${cleanupError.message}`;
+        }
+        setFeedback(message);
       } finally {
         setBusy(false);
       }
       return;
     }
 
-    setProfile({ id: "demo-profile", display_name: displayName, headline, countyId, countyName: countyId ? countyIds[countyId - 1] : "Kenya" });
-    setFeedback("Demo profile updated in this session only.");
-    setProfileOpen(false);
   }
 
   async function submitOpportunity(event: FormEvent<HTMLFormElement>) {
@@ -695,6 +1237,10 @@ export default function Home() {
       router.push("/auth");
       return;
     }
+    if (!["employer", "recruiter", "administrator"].includes(profile?.role ?? "")) {
+      setFeedback("Only employer and recruiter accounts can publish opportunities.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     const companyName = String(formData.get("companyName") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -704,6 +1250,10 @@ export default function Home() {
     const countyId = countyIdByName.get(countyValue) ?? null;
     const compensation = String(formData.get("compensation") ?? "").trim() || null;
     const deadlineValue = String(formData.get("deadline") ?? "");
+    if (deadlineValue && Date.parse(deadlineValue) <= Date.now()) {
+      setFeedback("Choose an application deadline in the future.");
+      return;
+    }
     setBusy(true);
     setFeedback("");
     try {
@@ -742,8 +1292,11 @@ export default function Home() {
         tag: "All talents",
         initials: getInitials(companyName),
         tone: "green",
+        verified: false,
+        ownerId: currentUserId,
         pay: compensation ?? undefined,
         deadline: deadlineValue ? `Closes ${new Date(deadlineValue).toLocaleDateString()}` : "Open",
+        deadlineAt: deadlineValue ? new Date(deadlineValue).toISOString() : null,
       };
       setRemoteOpportunities((current) => [newOpportunity, ...(current ?? [])]);
       setFeedback("Your opportunity is published.");
@@ -756,13 +1309,16 @@ export default function Home() {
   }
 
   async function toggleApply(item: Opportunity) {
-    if (!item.id || !supabase) {
-      setApplied((current) => current.includes(item.title) ? current.filter((entry) => entry !== item.title) : [...current, item.title]);
-      setFeedback("This is a demo opportunity; applications aren’t submitted.");
+    if (!supabase) {
+      setFeedback("Connect Supabase to submit a real application.");
       return;
     }
     if (!currentUserId) {
       router.push("/auth");
+      return;
+    }
+    if (item.ownerId === currentUserId) {
+      setFeedback("You can’t apply to an opportunity published by your organisation.");
       return;
     }
     const alreadyApplied = applied.includes(item.id);
@@ -782,6 +1338,79 @@ export default function Home() {
       }
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Could not update your application.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitCampaign(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !currentUserId) {
+      router.push("/auth");
+      return;
+    }
+    const formData = new FormData(event.currentTarget);
+    const companyName = String(formData.get("companyName") ?? "").trim();
+    const title = String(formData.get("title") ?? "").trim();
+    const talentId = String(formData.get("talentId") ?? "") || null;
+    const countyName = String(formData.get("county") ?? "");
+    const countyId = countyIdByName.get(countyName) ?? null;
+    const budgetValue = String(formData.get("budget") ?? "").trim();
+    const budget = budgetValue ? Number(budgetValue) : null;
+    if (budget !== null && (!Number.isFinite(budget) || budget < 0)) {
+      setFeedback("Enter a valid non-negative campaign budget.");
+      return;
+    }
+    setBusy(true);
+    setFeedback("");
+    try {
+      const { data: existingCompany, error: existingError } = await supabase.from("companies").select("id")
+        .eq("owner_id", currentUserId).eq("name", companyName).maybeSingle();
+      if (existingError) throw existingError;
+      let companyId = existingCompany?.id;
+      if (!companyId) {
+        const { data: createdCompany, error: createCompanyError } = await supabase.from("companies")
+          .insert({ owner_id: currentUserId, name: companyName })
+          .select("id").single();
+        if (createCompanyError) throw createCompanyError;
+        companyId = createdCompany.id;
+      }
+      const { data: createdCampaign, error } = await supabase.from("advertisements")
+        .insert({ company_id: companyId, title, target_talent_id: talentId, target_county_id: countyId, budget, status: "draft" })
+        .select("id").single();
+      if (error) throw error;
+      setCampaigns((current) => [{
+        id: createdCampaign.id,
+        companyId,
+        company: companyName,
+        title,
+        status: "draft",
+        budget,
+        impressions: 0,
+        clicks: 0,
+      }, ...current]);
+      setFeedback("Campaign draft saved. It has not been published or delivered.");
+      setCampaignOpen(false);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not save this campaign draft.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteCampaign(campaign: Campaign) {
+    if (!supabase || !currentUserId) {
+      router.push("/auth");
+      return;
+    }
+    if (!window.confirm(`Delete the campaign draft “${campaign.title}”?`)) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("advertisements").delete().eq("id", campaign.id).eq("company_id", campaign.companyId);
+      if (error) throw error;
+      setCampaigns((current) => current.filter((entry) => entry.id !== campaign.id));
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not delete the campaign.");
     } finally {
       setBusy(false);
     }
@@ -810,80 +1439,62 @@ export default function Home() {
       <>
         <form className={`composer card ${postOpen ? "composer-open" : ""}`} onSubmit={submitPost}>
           <div className="composer-top">
-            <Avatar initials="AO" tone="orange" />
+            <Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" image={profile?.avatarUrl ?? undefined} />
             <button type="button" className="composer-prompt" onClick={() => setPostOpen((open) => !open)}>
-              Share an achievement, idea or opportunity...
+              Share what you&apos;re working on with the community
             </button>
           </div>
           {postOpen && (
-            <textarea autoFocus value={postText} onChange={(event) => setPostText(event.target.value)} placeholder="What are you working on?" aria-label="Write a post" />
+            <textarea autoFocus value={postText} onChange={(event) => setPostText(event.target.value)} placeholder="Tell us what you&apos;re creating, learning or looking for..." aria-label="Write a post" maxLength={5000} />
           )}
+          {postImagePreview && <div className="post-photo-preview">
+            <Image src={postImagePreview} alt="Selected photo preview" width={1200} height={900} unoptimized />
+            <button type="button" className="icon-button" onClick={clearPostImage} aria-label="Remove selected photo"><Icon name="close" size={17} /></button>
+          </div>}
+          {postImagePreview && <p className="post-photo-note">Photos are public with your post · Up to 5 MB</p>}
+          <input
+            ref={photoInput}
+            className="visually-hidden"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            aria-label="Choose a photo"
+            onChange={(event) => choosePostImage(event.target.files?.[0])}
+          />
           <div className="composer-actions">
-            <button type="button" className="quiet-button" onClick={() => setPostOpen(true)}><Icon name="image" size={17} /> Photo</button>
-            <button type="button" className="quiet-button" onClick={() => setPostOpen(true)}><Icon name="sparkles" size={17} /> Opportunity</button>
-            {postOpen ? <button className="primary-button compact" type="submit">Post <Icon name="arrow" size={15} /></button> : <button className="primary-button compact" type="button" onClick={() => setPostOpen(true)}>Write a post</button>}
+            <button type="button" className="quiet-button" disabled={!currentUserId} onClick={() => photoInput.current?.click()}><Icon name="image" size={17} /> Add a photo</button>
+            <button type="button" className="quiet-button" onClick={() => setSection("Jobs")}><Icon name="briefcase" size={17} /> Explore opportunities</button>
+            {currentUserId
+              ? postOpen
+                ? <button className="primary-button compact" type="submit" disabled={busy}>{busy ? "Publishing…" : "Publish update"} <Icon name="arrow" size={15} /></button>
+                : <button className="primary-button compact" type="button" onClick={() => setPostOpen(true)}>Write an update</button>
+              : <Link className="primary-button compact" href="/auth">Sign in to post</Link>}
           </div>
         </form>
 
-        <div className="feed-heading"><span>Community feed</span><button type="button" className="sort-button">For you <span>⌄</span></button></div>
+        <div className="feed-heading"><span>{section === "Saved posts" ? "Saved posts" : "Community updates"}</span><span className={`live-indicator ${realtimeConnected ? "is-live" : ""}`}><i />{realtimeConnected ? "Live updates" : configured ? "Connecting" : "Offline"}</span></div>
         {loadingData && <div className="empty-state card">Loading the community feed…</div>}
-        {!loadingData && posts.length === 0 && <>
-          <div className="empty-state card feed-empty-state">No posts yet. Share the first update with your community.</div>
-          <article className="post card mobile-preview-post">
-            <div className="post-header">
-              <Avatar initials="BK" tone="green" image="/brian-kimani.jpg" />
-              <div className="post-author"><strong>Brian Kimani <span className="preview-label">SAMPLE</span></strong><span>Pool champion · Nairobi</span><small>2h <span>·</span> <span className="public-dot">●</span></small></div>
-              <button className="icon-button post-more" aria-label="Sample post preview"><Icon name="more" /></button>
-            </div>
-            <p className="post-copy">I’m thrilled to share that I won the Nairobi County Pool Championship! This journey has been amazing, and I’m grateful for everyone who supported me. 🎱</p>
-            <Image className="mobile-preview-image" src="/pool-championship.jpg" alt="Pool championship tournament" width={321} height={133} sizes="(max-width: 720px) 100vw, 321px" loading="eager" />
-            <div className="post-stats"><span>24 appreciations</span><span>8 comments · 3 shares</span></div>
-            <div className="post-actions">
-              <button disabled><Icon name="heart" size={17} /> Appreciate</button>
-              <button disabled><Icon name="comment" size={17} /> Comment</button>
-              <button disabled><Icon name="share" size={17} /> Share</button>
-            </div>
-            <div className="mobile-preview-comment">
-              <Avatar initials="AW" tone="rose" size="small" image="/aisha-wanjiku.jpg" />
-              <p><strong>Aisha Wanjiku</strong><span>Congratulations Brian! Well deserved 🎱</span></p>
-            </div>
-          </article>
-          <section className="mobile-suggestions card">
-            <div className="mobile-suggestions-heading"><h2>Talent you may know</h2><button onClick={() => setSection("My Network")}>See all</button></div>
-            <div className="mobile-suggestion">
-              <Avatar initials="AW" tone="rose" image="/aisha-wanjiku.jpg" />
-              <span><strong>Aisha Wanjiku <span className="preview-label">SAMPLE</span></strong><small>Visual artist · Nairobi</small></span>
-              <button type="button" onClick={() => setSection("My Network")}>Connect</button>
-            </div>
-            <div className="mobile-suggestion">
-              <Avatar initials="GO" tone="blue" image="/grace-otieno.jpg" />
-              <span><strong>Grace Otieno <span className="preview-label">SAMPLE</span></strong><small>Photographer · Kisumu</small></span>
-              <button type="button" onClick={() => setSection("My Network")}>Connect</button>
-            </div>
-          </section>
-        </>}
-        {posts.map((post) => {
+        {!loadingData && visiblePosts.length === 0 && <div className="empty-state card feed-empty-state">{section === "Saved posts" ? "You haven’t saved any posts yet." : configured ? "No community updates yet. Share the first one." : "Connect Supabase to view and share real community updates."}</div>}
+        {visiblePosts.map((post) => {
           const isLiked = liked.includes(post.id);
+          const isSaved = savedPostIds.includes(post.id);
           return (
             <article className="post card" key={post.id}>
               <div className="post-header">
-                <Avatar initials={post.initials} tone={post.tone} />
-                <div className="post-author"><strong>{post.name}</strong><span>{post.role}</span><small>{post.time} <span>·</span> <span className="public-dot">●</span></small></div>
-                <button className="icon-button post-more" aria-label="More post options"><Icon name="more" /></button>
+                <Avatar initials={post.initials} tone={post.tone} image={post.avatarUrl ?? undefined} />
+                <div className="post-author"><strong>{post.name}</strong><span>{post.role}</span><small><time dateTime={post.createdAt}>{formatRelativeTime(post.createdAt)}</time> <span>·</span> <span className="public-dot">●</span></small></div>
               </div>
               <p className="post-copy">{post.text}</p>
-              {post.art && <div className={`post-art post-art-${post.art}`} aria-label={`${post.category} showcase artwork`}>
-                <div className="art-caption"><span>{post.category}</span><strong>{post.art === "run" ? "The work behind the moment." : "Colour belongs to everyone."}</strong></div>
-                <span className="art-mark">{post.art === "run" ? "RUN / 01" : "SANA / 24"}</span>
-              </div>}
-              <div className="post-stats"><span>{post.likes + (isLiked ? 1 : 0)} appreciations</span><span>{post.comments} comments · 3 shares</span></div>
+              {post.imageUrl && <Image className="post-media" src={post.imageUrl} alt={`Photo shared by ${post.name}`} width={1200} height={900} sizes="(max-width: 720px) 100vw, 720px" unoptimized />}
+              <div className="post-stats"><span>{post.likes} appreciations</span><span>{post.comments} comments</span></div>
               <div className="post-actions">
-                <button className={isLiked ? "liked" : ""} onClick={() => void toggleLike(post.id)}><Icon name="heart" size={17} /> Appreciate</button>
+                <button className={isLiked ? "liked" : ""} disabled={busy} onClick={() => void toggleLike(post.id)}><Icon name="heart" size={17} /> {isLiked ? "Appreciated" : "Appreciate"}</button>
                 <button onClick={() => void showComments(post.id)}><Icon name="comment" size={17} /> Comment</button>
-                <button><Icon name="share" size={17} /> Share</button>
+                <button onClick={() => void sharePost(post)}><Icon name="share" size={17} /> Share</button>
+                <button className={isSaved ? "liked" : ""} disabled={busy} onClick={() => void toggleSavedPost(post.id)} aria-label={isSaved ? "Remove saved post" : "Save post"}><Icon name="bookmark" size={17} /> {isSaved ? "Saved" : "Save"}</button>
+                {currentUserId === post.userId && <button className="post-delete-button" disabled={busy} onClick={() => void removePost(post)} aria-label="Delete your post"><Icon name="close" size={17} /> Delete</button>}
               </div>
               {openComments === post.id && <div className="comments-panel">
-                {(commentsByPost[String(post.id)] ?? []).map((comment) => <div className="comment-row" key={comment.id}><Avatar initials={comment.initials} tone="green" size="small" /><p><strong>{comment.name}</strong><span>{comment.text}</span></p></div>)}
+                {(commentsByPost[String(post.id)] ?? []).map((comment) => <div className="comment-row" key={comment.id}><Avatar initials={comment.initials} tone="green" size="small" image={comment.avatarUrl ?? undefined} /><p><strong>{comment.name}</strong><span>{comment.text}</span></p></div>)}
                 {!supabase && <p className="comment-hint">Sign in with Supabase to add comments to published posts.</p>}
                 <form className="comment-form" onSubmit={(event) => void submitComment(event, post.id)}><input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder={supabase ? "Write a comment..." : "Comments require a connected account"} aria-label="Write a comment" disabled={!supabase || busy} /><button type="submit" disabled={!supabase || busy || !commentDraft.trim()} aria-label="Submit comment"><Icon name="send" size={15} /></button></form>
               </div>}
@@ -897,29 +1508,30 @@ export default function Home() {
   function renderPeople() {
     return (
       <>
-        <SectionTitle eyebrow="Find your people" title="My Network" action={<button className="outline-button"><Icon name="users" size={16} /> My connections</button>} />
+        <SectionTitle eyebrow="Meet real members" title="My Network" />
         <div className="network-summary card">
-          <div><span className="summary-number">{supabase ? connectionCount : 248}</span><span>connections</span></div>
-          <div><span className="summary-number">{supabase ? invitationCount : 12}</span><span>new invitations</span></div>
-          <p>Good things happen when talent meets talent. Build your circle across Kenya.</p>
+          <button className={networkFilter === "connected" ? "network-filter active" : "network-filter"} onClick={() => setNetworkFilter(networkFilter === "connected" ? "everyone" : "connected")}><span className="summary-number">{connectionCount}</span><span>connections</span></button>
+          <button className={networkFilter === "incoming" ? "network-filter active" : "network-filter"} onClick={() => setNetworkFilter(networkFilter === "incoming" ? "everyone" : "incoming")}><span className="summary-number">{invitationCount}</span><span>connection requests</span></button>
+          <p>Connect with people whose work and interests match yours.</p>
         </div>
-        <div className="list-toolbar"><div><h2>People you may know</h2><p>Meet creatives, makers and athletes in your community.</p></div>{countySelect}</div>
+        <div className="list-toolbar"><div><h2>{networkFilter === "incoming" ? "Connection requests" : networkFilter === "connected" ? "Your connections" : "Community members"}</h2><p>Find members by name, talent or county.</p></div>{countySelect}</div>
         <div className="people-grid">
-          {loadingData && <div className="empty-state card">Loading people from the community…</div>}
+          {loadingData && <div className="empty-state card">Loading community members…</div>}
           {filteredPeople.map((person) => {
             const status = connectionStatus[person.id ?? person.name];
-            const label = status === "connected" ? "Connected" : status === "incoming" ? "Accept request" : status === "pending" ? "Requested" : status === "declined" ? "Request declined" : "Connect";
             return (
             <article className="person-card card" key={person.name}>
               <div className={`person-cover cover-${person.tone}`}><span className="cover-star">✳</span></div>
-              <Avatar initials={person.initials} tone={person.tone} size="large" />
-              <div className="person-info"><strong>{person.name}</strong><span>{person.role}</span><small><Icon name="map" size={13} /> {person.county} County</small><p>{person.mutual} mutual connections</p></div>
-              <button className={`connect-button ${status ? "is-connected" : ""}`} disabled={busy || status === "connected" || status === "declined"} onClick={() => void toggleConnection(person)}>
-                <Icon name={status === "incoming" || status === "connected" ? "check" : "plus"} size={16} /> {label}
-              </button>
+              <Avatar initials={person.initials} tone={person.tone} size="large" image={person.avatarUrl ?? undefined} />
+              <div className="person-info"><strong>{person.name}</strong><span>{person.role}</span><small><Icon name="map" size={13} /> {person.county === "Kenya" ? "Kenya" : `${person.county} County`}</small></div>
+              {status === "incoming"
+                ? <div className="person-actions"><button className="connect-button" disabled={busy} onClick={() => void respondToConnection(person, "accepted")}><Icon name="check" size={16} /> Accept</button><button className="outline-button" disabled={busy} onClick={() => void respondToConnection(person, "rejected")}>Decline</button></div>
+                : status === "connected"
+                  ? <div className="person-actions"><button className="connect-button is-connected" disabled><Icon name="check" size={16} /> Connected</button><button className="outline-button" onClick={() => openConversation(person)}>Message</button></div>
+                  : <button className="connect-button" disabled={busy || status === "declined"} onClick={() => void toggleConnection(person)}><Icon name={status === "pending" ? "close" : "plus"} size={16} /> {status === "pending" ? "Cancel request" : status === "declined" ? "Request declined" : "Connect"}</button>}
             </article>
           );})}
-          {filteredPeople.length === 0 && <div className="empty-state card">No people match those filters yet. Try another county or search.</div>}
+          {!loadingData && filteredPeople.length === 0 && <div className="empty-state card">{supabase ? "No members match these filters yet. Try another county or search." : "Connect Supabase and sign in to discover real community members."}</div>}
         </div>
       </>
     );
@@ -928,12 +1540,13 @@ export default function Home() {
   function renderOpportunities(title: "Jobs" | "Investors") {
     const isJobs = title === "Jobs";
     const list = isJobs ? filteredOpportunities.filter((item) => item.type === "Job") : filteredOpportunities;
+    const canManageOpportunities = ["employer", "recruiter", "administrator"].includes(profile?.role ?? "");
     const sectionAction = (
       <div className="title-actions">
         {countySelect}
-        <button className="primary-button" onClick={() => currentUserId ? setOpportunityOpen(true) : router.push("/auth")}>
-          <Icon name="plus" size={16} /> Post an opportunity
-        </button>
+        {canManageOpportunities
+          ? <button className="primary-button" onClick={() => setOpportunityOpen(true)}><Icon name="plus" size={16} /> Post an opportunity</button>
+          : !currentUserId && <Link className="outline-button" href="/auth">Sign in to post an opportunity</Link>}
       </div>
     );
     return (
@@ -946,10 +1559,10 @@ export default function Home() {
           {list.map((item) => {
             const isApplied = applied.includes(item.id ?? item.title);
             return (
-            <article className="opportunity-card card" key={item.title}>
+            <article className="opportunity-card card" key={item.id}>
               <div className={`company-mark mark-${item.tone}`}>{item.initials}</div>
               <div className="opportunity-content">
-                <div className="opportunity-company">{item.company} <span className="verified-mark">✓</span></div>
+                <div className="opportunity-company">{item.company}{item.verified && <span className="verified-mark" aria-label="Verified organisation">✓</span>}</div>
                 <h2>{item.title}</h2>
                 <p>{item.detail}</p>
                 <div className="opportunity-meta"><span><Icon name="map" size={14} /> {item.county}</span><span className="tag">{item.tag}</span><span className={`type-label type-${item.type.toLowerCase()}`}>{item.type}</span></div>
@@ -957,65 +1570,87 @@ export default function Home() {
               <div className="opportunity-apply">
                 <strong>{item.pay ?? "Open opportunity"}</strong>
                 <span><Icon name="clock" size={13} /> {item.deadline}</span>
-                <button className={isApplied ? "outline-button applied" : "primary-button"} disabled={busy} onClick={() => void toggleApply(item)}>
-                  {isApplied ? <><Icon name="check" size={15} /> {item.id ? "Applied" : "Demo saved"}</> : item.id ? "Apply" : "Demo listing"}
-                </button>
+                {profile?.role === "talent"
+                  ? <button className={isApplied ? "outline-button applied" : "primary-button"} disabled={busy || item.ownerId === currentUserId} onClick={() => void toggleApply(item)}>
+                    {isApplied ? <><Icon name="check" size={15} /> Withdraw application</> : item.ownerId === currentUserId ? "Your listing" : "Apply"}
+                  </button>
+                  : !currentUserId && <Link className="primary-button" href="/auth">Sign in to apply</Link>}
               </div>
             </article>
           );})}
-          {list.length === 0 && <div className="empty-state card">No opportunities match these filters. Try another category or county.</div>}
+          {list.length === 0 && <div className="empty-state card">{supabase ? "No published opportunities match these filters yet." : "Connect Supabase to browse real opportunities."}</div>}
         </div>
       </>
     );
   }
 
-  function renderAds() {
+  function renderCampaigns() {
+    const totalImpressions = campaigns.reduce((total, campaign) => total + campaign.impressions, 0);
+    const totalClicks = campaigns.reduce((total, campaign) => total + campaign.clicks, 0);
     return (
       <>
-        <SectionTitle eyebrow="For your brand" title="Campaign dashboard" action={<button className="primary-button" onClick={() => setAdOpen(true)}><Icon name="plus" size={17} /> Create campaign</button>} />
-        <p className="page-intro">A simple overview of how your campaigns are reaching talent. Metrics below are sample demo data.</p>
+        <SectionTitle eyebrow="For organisations" title="Campaigns" action={
+          ["employer", "recruiter", "administrator"].includes(profile?.role ?? "")
+            ? <button className="primary-button" onClick={() => setCampaignOpen(true)}><Icon name="plus" size={17} /> Create campaign draft</button>
+            : !currentUserId && <Link className="primary-button" href="/auth">Sign in to manage campaigns</Link>
+        } />
+        <p className="page-intro">Manage campaign drafts for your organisation. Drafts are saved to your account and are not delivered as ads.</p>
         <div className="metrics-grid">
-          <div className="metric-card card"><span>Impressions</span><strong>12,540</strong><small className="metric-up">↗ 12.8% <span>vs. last month</span></small></div>
-          <div className="metric-card card"><span>Clicks</span><strong>420</strong><small className="metric-up">↗ 8.2% <span>vs. last month</span></small></div>
-          <div className="metric-card card"><span>Click-through rate</span><strong>3.35%</strong><small>Across active campaigns</small></div>
-          <div className="metric-card card"><span>Active campaigns</span><strong>{adActive ? "3" : "2"}</strong><small>{adActive ? "Campaigns are running" : "One campaign paused"}</small></div>
+          <div className="metric-card card"><span>Campaign drafts</span><strong>{campaigns.length}</strong><small>Your organisation’s saved campaigns</small></div>
+          <div className="metric-card card"><span>Recorded impressions</span><strong>{totalImpressions.toLocaleString()}</strong><small>Events recorded in the database</small></div>
+          <div className="metric-card card"><span>Recorded clicks</span><strong>{totalClicks.toLocaleString()}</strong><small>Events recorded in the database</small></div>
+          <div className="metric-card card"><span>Delivery</span><strong>Not enabled</strong><small>Campaign delivery is not configured</small></div>
         </div>
         <div className="card campaign-panel">
-          <div className="panel-heading"><div><h2>Your campaigns</h2><p>Manage your current placements.</p></div><button className="quiet-button" onClick={() => setAdActive((active) => !active)}>{adActive ? "Pause one campaign" : "Resume campaign"}</button></div>
-          {[
-            ["Find the next sound", "Music · Nairobi & Mombasa", "8,240", "2.9%", "Live", "violet"],
-            ["Local running series", "Athletics · Nationwide", "4,300", "3.8%", adActive ? "Live" : "Paused", "green"],
-            ["Makers market callout", "Craft · Kisumu", "1,860", "2.1%", "In review", "orange"],
-          ].map(([name, target, impressions, ctr, status, tone]) => (
-            <div className="campaign-row" key={name}><span className={`campaign-dot dot-${tone}`} /><div className="campaign-name"><strong>{name}</strong><span>{target}</span></div><span className="campaign-stat"><strong>{impressions}</strong><small>Impressions</small></span><span className="campaign-stat"><strong>{ctr}</strong><small>CTR</small></span><span className={`status-pill status-${status.toLowerCase().replace(" ", "-")}`}>{status}</span></div>
+          <div className="panel-heading"><div><h2>Your campaign drafts</h2><p>Saved against your organisation.</p></div></div>
+          {loadingData && <div className="empty-state">Loading your campaigns…</div>}
+          {!loadingData && campaigns.map((campaign) => (
+            <div className="campaign-row" key={campaign.id}>
+              <span className="campaign-dot dot-green" />
+              <div className="campaign-name"><strong>{campaign.title}</strong><span>{campaign.company} · {campaign.status}</span></div>
+              <span className="campaign-stat"><strong>{campaign.budget === null ? "—" : `KES ${campaign.budget.toLocaleString()}`}</strong><small>Budget</small></span>
+              <span className="campaign-stat"><strong>{campaign.impressions.toLocaleString()}</strong><small>Impressions</small></span>
+              <span className="campaign-stat"><strong>{campaign.clicks.toLocaleString()}</strong><small>Clicks</small></span>
+              <button className="icon-button" disabled={busy} onClick={() => void deleteCampaign(campaign)} aria-label={`Delete ${campaign.title}`}><Icon name="close" size={16} /></button>
+            </div>
           ))}
+          {!loadingData && campaigns.length === 0 && <div className="empty-state">{supabase ? "You don’t have any campaign drafts yet." : "Connect Supabase to manage real campaign drafts."}</div>}
         </div>
-        <div className="notice-card"><Icon name="sparkles" size={18} /><p><strong>Just getting started?</strong> Campaign performance shown here is illustrative. Connect an account to see real delivery and billing.</p></div>
+        <div className="notice-card"><Icon name="sparkles" size={18} /><p><strong>Campaign delivery is not enabled.</strong> No impressions, clicks or billing are generated by this platform yet.</p></div>
       </>
     );
   }
 
   function renderMessages() {
+    const activeConversation = conversations.find((conversation) => conversation.userId === activeConversationId) ?? null;
+    const filteredConversations = conversations.filter((conversation) => (
+      `${conversation.name} ${conversation.headline}`.toLowerCase().includes(messageSearch.toLowerCase())
+    ));
     return (
       <>
-        <SectionTitle eyebrow="Your conversations" title="Messages" />
+        <SectionTitle eyebrow="Private conversations" title="Messages" />
+        {!currentUserId && <div className="empty-state card">Sign in to message people you’re connected with. <Link href="/auth">Sign in</Link></div>}
+        {currentUserId && <p className="page-intro">Messages are private and available to members who have accepted each other’s connection request.</p>}
         <div className="messages-layout card">
           <div className="conversation-list">
-            <div className="conversation-search"><Icon name="search" size={15} /><input placeholder="Search messages" aria-label="Search messages" /></div>
-            {[
-              ["Wanjiku Njeri", "Would love to hear more about the showcase!", "WN", "rose", "10:42"],
-              ["Kifaru Athletics", "Thanks for connecting. Here are the details...", "KA", "green", "Yesterday"],
-              ["Amina Abdalla", "That sounds like a great collaboration.", "AA", "blue", "Mon"],
-            ].map(([name, message, initials, tone, time], index) => (
-              <button className={`conversation ${index === 0 ? "conversation-active" : ""}`} key={name} onClick={() => setMessageSent(false)}>
-                <Avatar initials={initials} tone={tone} /><span className="conversation-copy"><strong>{name}</strong><small>{message}</small></span><time>{time}</time>
+            <label className="conversation-search"><Icon name="search" size={15} /><input value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></label>
+            {filteredConversations.map((conversation) => (
+              <button className={`conversation ${conversation.userId === activeConversationId ? "conversation-active" : ""}`} key={conversation.userId} onClick={() => setActiveConversationId(conversation.userId)}>
+                <Avatar initials={getInitials(conversation.name)} tone="green" image={conversation.avatarUrl ?? undefined} /><span className="conversation-copy"><strong>{conversation.name}</strong><small>{conversation.lastMessage}</small></span><time>{formatRelativeTime(conversation.lastMessageAt)}</time>{conversation.unread > 0 && <span className="unread-count">{conversation.unread}</span>}
               </button>
             ))}
+            {filteredConversations.length === 0 && <div className="empty-state">{currentUserId ? "No conversations yet. Connect with a member to start a conversation." : "Your conversations will appear here after you sign in."}</div>}
           </div>
           <div className="chat-panel">
-            <div className="chat-header"><Avatar initials="WN" tone="rose" size="small" /><span><strong>Wanjiku Njeri</strong><small>Illustrator · Nairobi</small></span></div>
-            <div className="chat-body"><span className="chat-date">TODAY</span><div className="message-bubble received">Hey Alex! I saw your post about the showcase. Would love to hear more about it.</div><div className="message-bubble sent">{messageSent ? "Thanks, I’ll send over the details shortly!" : "Hi Wanjiku! I’m glad it caught your eye. We’re bringing local artists together next month."}</div></div>
-            <div className="chat-compose"><input placeholder="Write a message..." aria-label="Write a message" onKeyDown={(event) => { if (event.key === "Enter") setMessageSent(true); }} /><button aria-label="Send message" onClick={() => setMessageSent(true)}><Icon name="send" size={17} /></button></div>
+            {activeConversation ? <>
+              <div className="chat-header"><Avatar initials={getInitials(activeConversation.name)} tone="green" size="small" image={activeConversation.avatarUrl ?? undefined} /><span><strong>{activeConversation.name}</strong><small>{activeConversation.headline}</small></span></div>
+              <div className="chat-body" aria-live="polite">
+                {loadingMessages && <p className="comment-hint">Loading messages…</p>}
+                {!loadingMessages && directMessages.length === 0 && <p className="comment-hint">Start the conversation with {activeConversation.name}.</p>}
+                {directMessages.map((message) => <div key={message.id} className={`message-bubble ${message.senderId === currentUserId ? "sent" : "received"}`}>{message.content}<time dateTime={message.createdAt}>{formatRelativeTime(message.createdAt)}</time></div>)}
+              </div>
+              <form className="chat-compose" onSubmit={(event) => void sendMessage(event)}><input value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} maxLength={5000} placeholder="Write a message…" aria-label="Write a message" disabled={busy} /><button type="submit" disabled={busy || !messageDraft.trim()} aria-label="Send message"><Icon name="send" size={17} /></button></form>
+            </> : <div className="empty-state chat-empty">{currentUserId ? "Choose a conversation, or connect with a member to start one." : "Sign in to access your private messages."}</div>}
           </div>
         </div>
       </>
@@ -1026,11 +1661,12 @@ export default function Home() {
     if (section === "My Network") return renderPeople();
     if (section === "Jobs") return renderOpportunities("Jobs");
     if (section === "Investors") return renderOpportunities("Investors");
-    if (section === "Ads") return renderAds();
+    if (section === "Campaigns") return renderCampaigns();
     if (section === "Messages") return renderMessages();
+    if (section === "Saved posts") return renderPosts();
     return (
       <>
-        <div className="welcome-strip"><span className="welcome-kicker">HOME OF TALENTS · KENYA</span><h1>Your talent has a place here.</h1><p>Meet your community, share what you do, and find your next opportunity.</p></div>
+        <div className="welcome-strip"><span className="welcome-kicker">KENYA’S TALENT COMMUNITY</span><h1>Good work deserves to be seen.</h1><p>Share what you&apos;re building, meet people who get it, and discover opportunities across Kenya.</p></div>
         {renderPosts()}
       </>
     );
@@ -1039,36 +1675,34 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#" onClick={(event) => { event.preventDefault(); setSection("Home"); }} aria-label="TalantaLink home">
+        <Link className="brand" href="/" onClick={() => setSection("Home")} aria-label="TalantaLink home">
           <span className="brand-shield"><Image src="/kenya-flag.svg" alt="" width={35} height={39} priority /></span>
           <span className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></span>
-        </a>
+        </Link>
         <label className="global-search"><Icon name="search" size={17} /><input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search talent, skills, opportunities..." aria-label="Search TalantaLink" /><kbd>Ctrl K</kbd></label>
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {navItems.filter((item) => item.label !== "Investors" && item.label !== "Ads").map((item) => (
+          {navItems.filter((item) => ["Home", "My Network", "Jobs", "Messages"].includes(item.label)).map((item) => (
             <button key={item.label} aria-label={item.label} title={item.label} className={section === item.label ? "desktop-nav-active" : ""} onClick={() => setSection(item.label)}>
               <Icon name={item.icon} size={19} />
               <span>{item.label === "My Network" ? "Network" : item.label}</span>
             </button>
           ))}
         </nav>
-        <div className="topbar-actions"><span className="demo-badge"><span /> {configured ? currentUserId ? "CONNECTED" : "SUPABASE" : "DEMO"}</span><button className="icon-button notification-button" aria-label="Notifications"><Icon name="bell" size={19} /><i /></button><div className="topbar-divider" />{currentUserId && supabase ? <button className="profile-menu" onClick={() => void signOut()}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="small" /><span>{profile?.display_name ?? "Account"}</span><span className="chevron">↪</span></button> : <Link className="profile-menu" href="/auth"><Avatar initials="AO" tone="orange" size="small" /><span>Sign in</span><span className="chevron">→</span></Link>}</div>
+        <div className="topbar-actions"><span className={`connection-badge ${realtimeConnected ? "is-live" : ""}`}><span /> {realtimeConnected ? "LIVE" : configured ? "CONNECTING" : "OFFLINE"}</span><button className="icon-button notification-button" aria-label={`${invitationCount} connection requests`} onClick={() => { setSection("My Network"); setNetworkFilter("incoming"); }}><Icon name="bell" size={19} />{invitationCount > 0 && <i />}</button><div className="topbar-divider" />{currentUserId && supabase ? <button className="profile-menu" onClick={() => void signOut()}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="small" image={profile?.avatarUrl ?? undefined} /><span>{profile?.display_name ?? "Account"}</span><span className="chevron">↪</span></button> : <Link className="profile-menu" href="/auth"><Avatar initials="TL" tone="green" size="small" /><span>Sign in</span><span className="chevron">→</span></Link>}</div>
       </header>
 
       <div className="app-layout">
         <aside className="left-sidebar">
           <div className="sidebar-profile card">
             <div className="profile-cover"><span>✳</span><span>✳</span><span>✳</span></div>
-            <Avatar initials="AO" tone="orange" size="large" />
-            <div className="sidebar-profile-info"><strong>{profile?.display_name ?? "Alex Ouma"}</strong><span>{profile?.headline || "Dancer & choreographer"}</span><small><Icon name="map" size={13} /> {profile?.countyName ?? "Nairobi"}, Kenya</small></div>
-            <div className="profile-tags"><span>Dance</span><span>Choreography</span><span>+2</span></div>
-            <div className="profile-stats"><div><strong>{supabase && currentUserId ? "—" : "1.2k"}</strong><span>Profile views</span></div><div><strong>{supabase && currentUserId ? "—" : "860"}</strong><span>Post reach</span></div></div>
-            <div className="open-to"><span className="open-dot" /> Open to opportunities</div>
-            <button className="profile-edit" onClick={() => setProfileOpen(true)}>Edit your profile <Icon name="arrow" size={14} /></button>
+            <Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="large" image={profile?.avatarUrl ?? undefined} />
+            <div className="sidebar-profile-info"><strong>{profile?.display_name ?? (currentUserId ? "Complete your profile" : "Welcome to TalantaLink")}</strong><span>{profile?.headline || (currentUserId ? "Add a headline to introduce yourself" : "A community for Kenya’s talent")}</span><small><Icon name="map" size={13} /> {profile?.countyName ?? "Across Kenya"}</small></div>
+            {profile?.bio && <p className="profile-bio">{profile.bio}</p>}
+            <button className="profile-edit" onClick={() => currentUserId ? setProfileOpen(true) : router.push("/auth")}>{currentUserId ? "Edit your profile" : "Join the community"} <Icon name="arrow" size={14} /></button>
           </div>
           <nav className="side-nav" aria-label="Main navigation">
-            <p className="nav-label">EXPLORE</p>
-            {navItems.filter((item) => item.label === "Investors" || item.label === "Ads").map((item) => <button key={item.label} className={`nav-item ${section === item.label ? "nav-active" : ""}`} onClick={() => setSection(item.label)}><Icon name={item.icon} size={18} /><span>{item.label === "Investors" ? "Funding & partners" : "Promote your work"}</span></button>)}
+            <p className="nav-label">YOUR SPACE</p>
+            {navItems.filter((item) => item.label === "Investors" || item.label === "Campaigns" || item.label === "Saved posts").map((item) => <button key={item.label} className={`nav-item ${section === item.label ? "nav-active" : ""}`} onClick={() => setSection(item.label)}><Icon name={item.icon} size={18} /><span>{item.label === "Investors" ? "Funding & partners" : item.label}</span></button>)}
           </nav>
           <div className="sidebar-promo">
             <span className="promo-icon"><Icon name="sparkles" size={17} /></span>
@@ -1088,13 +1722,9 @@ export default function Home() {
         <aside className="right-sidebar">
           <section className="right-card opportunities-widget">
             <div className="right-card-heading"><div><p className="eyebrow">A GOOD NEXT STEP</p><h2>Opportunities</h2></div><button className="text-icon-button" aria-label="View all opportunities" onClick={() => setSection("Investors")}><Icon name="arrow" size={17} /></button></div>
-            {visibleOpportunities.slice(0, 3).map((item) => <button className="mini-opportunity" key={item.title} onClick={() => setSection(item.type === "Job" ? "Jobs" : "Investors")}><span className={`company-mark mini-mark mark-${item.tone}`}>{item.initials}</span><span><strong>{item.title}</strong><small>{item.company} · {item.county}</small></span><Icon name="arrow" size={14} /></button>)}
-            <button className="view-all-link" onClick={() => setSection("Investors")}>Explore all opportunities <span>→</span></button>
-          </section>
-          <section className="ad-widget">
-            <div className="ad-topline"><span>SPONSORED</span><Icon name="more" size={17} /></div>
-            <div className="ad-art"><span className="ad-sun" /><span className="ad-line ad-line-one" /><span className="ad-line ad-line-two" /><span className="ad-copy">MAKE<br />SOME<br /><b>NOISE.</b></span><span className="ad-side-label">KIFARU / SOUND</span></div>
-            <div className="ad-widget-body"><span className="campaign-tag">FOR THE CULTURE</span><h3>Big sound starts with your story.</h3><p>Discover an open call for emerging Kenyan musicians and sound artists.</p><button onClick={() => setSection("Investors")}>Explore the opportunity <Icon name="arrow" size={14} /></button></div>
+            {visibleOpportunities.slice(0, 3).map((item) => <button className="mini-opportunity" key={item.id} onClick={() => { setSection(item.type === "Job" ? "Jobs" : "Investors"); setQuery(item.title); }}><span className={`company-mark mini-mark mark-${item.tone}`}>{item.initials}</span><span><strong>{item.title}</strong><small>{item.company} · {item.county}</small></span><Icon name="arrow" size={14} /></button>)}
+            {visibleOpportunities.length === 0 && <p className="empty-sidebar-note">{loadingData ? "Loading opportunities…" : "No published opportunities yet."}</p>}
+            <button className="view-all-link" onClick={() => { setQuery(""); setSection("Investors"); }}>Explore all opportunities <span>→</span></button>
           </section>
           <section className="community-note"><div className="note-icon">✳</div><div><strong>A country of many talents.</strong><p>From the coast to the highlands, there&apos;s room for every kind of talent to grow.</p><button onClick={() => setSection("My Network")}>Meet your community <span>→</span></button></div></section>
           <div className="right-footer"><span>Kenya <span className="kenya-dots"><i /><i /><i /></span></span><span>Built for every talent.</span></div>
@@ -1104,10 +1734,13 @@ export default function Home() {
       {profileOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfileOpen(false); }}>
         <form className="modal-card" onSubmit={(event) => void submitProfile(event)}>
           <div className="modal-heading"><div><p className="eyebrow">YOUR TALENT, YOUR STORY</p><h2>Edit your profile</h2></div><button type="button" className="icon-button" aria-label="Close dialog" onClick={() => setProfileOpen(false)}><Icon name="close" /></button></div>
-          <p className="modal-description">{supabase ? "Your profile is visible to the TalantaLink community." : "This demo profile is stored only for this browser session."}</p>
-          <label>Your name<input name="displayName" required maxLength={100} defaultValue={profile?.display_name ?? "Alex Ouma"} /></label>
-          <label>Headline<input name="headline" maxLength={160} placeholder="e.g. Dancer & choreographer" defaultValue={profile?.headline ?? "Dancer & choreographer"} /></label>
-          <label>County<select name="county" defaultValue={profile?.countyId ? countyIds[profile.countyId - 1] : "Nairobi"}><option value="">Select a county</option>{counties.map((name) => <option key={name}>{name}</option>)}</select></label>
+          <p className="modal-description">Your profile is visible to other TalantaLink members.</p>
+          <button type="button" className="profile-avatar-picker" onClick={() => avatarInput.current?.click()}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="large" image={avatarPreview ?? profile?.avatarUrl ?? undefined} /><span>Choose a profile photo</span></button>
+          <input ref={avatarInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={(event) => chooseAvatarImage(event.target.files?.[0])} />
+          <label>Your name<input name="displayName" required maxLength={100} defaultValue={profile?.display_name ?? ""} /></label>
+          <label>Professional headline<input name="headline" maxLength={160} placeholder="e.g. Dancer and choreographer" defaultValue={profile?.headline ?? ""} /></label>
+          <label>About you<textarea name="bio" maxLength={2000} rows={4} placeholder="Share your experience, interests and what you’re looking for." defaultValue={profile?.bio ?? ""} /></label>
+          <label>County<select name="county" defaultValue={profile?.countyId ? countyIds[profile.countyId - 1] : ""}><option value="">Select a county</option>{counties.map((name) => <option key={name}>{name}</option>)}</select></label>
           <div className="modal-actions"><button type="button" className="outline-button" onClick={() => setProfileOpen(false)}>Cancel</button><button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save profile"} <Icon name="check" size={15} /></button></div>
         </form>
       </div>}
@@ -1131,14 +1764,18 @@ export default function Home() {
         </form>
       </div>}
 
-      {adOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAdOpen(false); }}>
-        <form className="modal-card" onSubmit={submitAd}>
-          <div className="modal-heading"><div><p className="eyebrow">REACH YOUR COMMUNITY</p><h2>Create a campaign</h2></div><button type="button" className="icon-button" aria-label="Close dialog" onClick={() => setAdOpen(false)}><Icon name="close" /></button></div>
-          <p className="modal-description">Tell the right people about an opportunity, event or product. This demo won&apos;t publish or charge for a campaign.</p>
-          <label>Campaign name<input required placeholder="e.g. Emerging artists open call" /></label>
-          <label>Who would you like to reach?<select defaultValue=""><option value="" disabled>Choose a talent category</option><option>Performing arts</option><option>Sports & fitness</option><option>Creative arts</option><option>All talent communities</option></select></label>
-          <label>County<select defaultValue="All counties"><option>All counties</option>{counties.map((name) => <option key={name}>{name}</option>)}</select></label>
-          <div className="modal-actions"><button type="button" className="outline-button" onClick={() => setAdOpen(false)}>Cancel</button><button type="submit" className="primary-button">Save draft <Icon name="arrow" size={15} /></button></div>
+      {campaignOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCampaignOpen(false); }}>
+        <form className="modal-card" onSubmit={(event) => void submitCampaign(event)}>
+          <div className="modal-heading"><div><p className="eyebrow">ORGANISATION CAMPAIGN</p><h2>Save a campaign draft</h2></div><button type="button" className="icon-button" aria-label="Close dialog" onClick={() => setCampaignOpen(false)}><Icon name="close" /></button></div>
+          <p className="modal-description">Drafts are saved to your organisation. Campaign publishing and ad delivery are not currently available.</p>
+          <label>Organisation<input name="companyName" required maxLength={160} placeholder="Registered organisation name" /></label>
+          <label>Campaign title<input name="title" required maxLength={160} placeholder="What are you promoting?" /></label>
+          <label>Talent audience<select name="talentId" defaultValue=""><option value="">All talent communities</option>{talentOptions.map((talent) => <option key={talent.id} value={talent.id}>{talent.name}</option>)}</select></label>
+          <div className="form-grid">
+            <label>County<select name="county" defaultValue=""><option value="">All counties</option>{counties.map((name) => <option key={name}>{name}</option>)}</select></label>
+            <label>Planned budget (KES)<input name="budget" type="number" min="0" step="1" placeholder="Optional" /></label>
+          </div>
+          <div className="modal-actions"><button type="button" className="outline-button" onClick={() => setCampaignOpen(false)}>Cancel</button><button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save draft"} <Icon name="arrow" size={15} /></button></div>
         </form>
       </div>}
 
@@ -1147,7 +1784,11 @@ export default function Home() {
         <button className={section === "My Network" ? "mobile-active" : ""} onClick={() => setSection("My Network")}><Icon name="users" size={20} /><span>Network</span></button>
         <button className="mobile-post-button" onClick={() => { setSection("Home"); setPostOpen(true); }}><Icon name="plus" size={21} /><span>Post</span></button>
         <button className={section === "Jobs" ? "mobile-active" : ""} onClick={() => setSection("Jobs")}><Icon name="briefcase" size={20} /><span>Jobs</span></button>
-        <button onClick={() => setProfileOpen(true)}><Avatar initials={profile ? getInitials(profile.display_name) : "AO"} tone="orange" size="small" /><span>Profile</span></button>
+        <button className={section === "Messages" ? "mobile-active" : ""} onClick={() => setSection("Messages")}><Icon name="message" size={20} /><span>Messages</span></button>
+        <button className={section === "Investors" ? "mobile-active" : ""} onClick={() => setSection("Investors")}><Icon name="sparkles" size={20} /><span>Funding</span></button>
+        <button className={section === "Campaigns" ? "mobile-active" : ""} onClick={() => setSection("Campaigns")}><Icon name="chart" size={20} /><span>Campaigns</span></button>
+        <button className={section === "Saved posts" ? "mobile-active" : ""} onClick={() => setSection("Saved posts")}><Icon name="bookmark" size={20} /><span>Saved</span></button>
+        <button onClick={() => currentUserId ? setProfileOpen(true) : router.push("/auth")}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="small" image={profile?.avatarUrl ?? undefined} /><span>{profile ? "Profile" : "Sign in"}</span></button>
       </nav>
     </main>
   );

@@ -4,9 +4,11 @@ A professional community for Kenya's talent to connect, share their work, and di
 
 ## Current status
 
-The site is connected to its Supabase project. Email/password sign-up and sign-in are available on `/auth`; profiles, posts, published opportunities, appreciations, comments, connection requests, and applications use Supabase. Campaign management and messaging are still prototype-only.
+Email/password registration, sign-in, email verification, password recovery, and reset are available on `/auth`. Registration sets a non-administrator account type, then guides verified members through profile setup and optional photo upload. Supabase sessions use shared SSR cookies, are refreshed in Next.js Proxy, and are validated again on protected server routes. Profiles, posts, opportunities, appreciations, comments, connection requests, applications, saved posts, messages, and campaign drafts use Supabase; the interface does not substitute sample records when the database is empty. Feed and message updates use Supabase Realtime.
 
-The public database currently has all 47 counties and eight talent categories; profiles, talents, companies, and opportunities are populated by users. Any remaining sample campaign metrics are illustrative, not real delivery data.
+Roles are Talent, Employer, Recruiter, and Administrator. Talent accounts can apply to opportunities; Employer and Recruiter accounts can manage their own listings and campaign drafts. Role restrictions are enforced by Supabase Row Level Security as well as the interface. Administrator cannot be selected at registration: assign it only through a trusted Supabase SQL session.
+
+Members can attach photos to posts and profiles. Campaigns are saved as drafts; ad delivery and event tracking are not implemented. Any campaign totals shown are derived from persisted advertisement events and should not be read as proof of campaign delivery.
 
 ## Run locally
 
@@ -21,14 +23,17 @@ Open [http://localhost:3000](http://localhost:3000). A local development server 
 
 ## Supabase setup
 
-The initial schema is applied to the connected project. For a fresh project:
+For a fresh project:
 
 1. In the Supabase Dashboard, open **SQL Editor** and run [`supabase/migrations/20261030000000_initial_schema.sql`](./supabase/migrations/20261030000000_initial_schema.sql). It creates the tables, 47 counties, eight talent categories, and Row Level Security policies.
-2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local` using the project URL and a publishable key from **Project Settings → API Keys**.
+2. Run [`supabase/migrations/20261030000100_enable_live_updates_and_post_photos.sql`](./supabase/migrations/20261030000100_enable_live_updates_and_post_photos.sql) to enable live feed events and create the public post-photo bucket with member-scoped uploads.
+3. Run [`supabase/migrations/20261030000200_member_features.sql`](./supabase/migrations/20261030000200_member_features.sql) to enable saved posts, profile photos, and messaging between accepted connections.
+4. Run [`supabase/migrations/20261030000300_authentication_roles.sql`](./supabase/migrations/20261030000300_authentication_roles.sql) to add account roles, onboarding state, and role-aware database policies.
+5. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local` using the project URL and a publishable key from **Project Settings → API Keys**.
 
-Publishable keys are intended for browser use with RLS enabled. **Never use or expose a service-role/secret key in the browser or commit it to source control.** The connected project uses `http://localhost:3000` as its auth site URL and redirect allowlist entry. Add the deployed site URL before production use.
+Publishable keys are intended for browser use with RLS enabled. **Never use or expose a service-role/secret key in the browser or commit it to source control.** Configure the Supabase Auth site URL and redirect allowlist to include `http://localhost:3000/auth/callback`; add the corresponding HTTPS callback URL before production use. Configure the confirmation and password recovery email templates to use Supabase’s verification link so they return through this callback. Email confirmation must be enabled to require address verification.
 
-The `.env.local` file is ignored by git. The auth trigger creates a public profile when Supabase creates a user. Company verification and sponsored posts are intentionally restricted; do not mark companies as verified from the client.
+The `.env.local` file is ignored by git. The auth trigger creates a profile and accepts only Talent, Employer, or Recruiter metadata; it always rejects Administrator self-assignment. To grant administrator access, run a trusted SQL statement such as `update public.profiles set role = 'administrator' where id = '<verified-user-uuid>';` in the Supabase Dashboard SQL Editor. Never expose a service-role key to the client. Company verification and sponsored posts are intentionally restricted; do not mark companies as verified from the client.
 
 ## Checks
 
@@ -36,13 +41,3 @@ The `.env.local` file is ignored by git. The auth trigger creates a public profi
 npm run lint
 npm run build
 ```
-
-## Next integration steps
-
-- Load the signed-in profile and county from Supabase instead of the demo profile.
-- Complete profile editing and talent profile onboarding.
-- Add company onboarding and opportunity publishing.
-- Persist campaigns and add server-side impression/click tracking.
-- Connect messaging to the database and configure storage buckets for profile and post media.
-
-Do not treat demo metrics or sample opportunity listings as real platform data.

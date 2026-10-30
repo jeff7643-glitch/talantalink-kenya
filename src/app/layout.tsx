@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TalantaLink Kenya | Home of Talents",
+  title: "TalantaLink Kenya | Kenya’s talent community",
   description:
-    "A professional community for Kenya's talent to connect, share their work and discover opportunities.",
+    "Share your work, meet Kenya’s creative community and discover opportunities that help your talent grow.",
   icons: {
     icon: "/icon.svg",
   },
