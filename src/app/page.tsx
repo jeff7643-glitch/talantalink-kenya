@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { signAvatarUrls } from "@/lib/storage/signed-urls";
 
 type IconName =
   | "home"
@@ -86,10 +87,14 @@ type FeedPost = {
   comments: number;
   avatarUrl?: string | null;
   imageUrl?: string | null;
+  videoUrl?: string | null;
+  mediaPath?: string | null;
+  mentionedUsers?: Array<{ id: string; name: string; handle: string }>;
 };
 
 type PostComment = {
   id: string;
+  userId: string;
   name: string;
   initials: string;
   text: string;
@@ -262,11 +267,10 @@ export default function Home() {
   const [postText, setPostText] = useState("");
   const [postImage, setPostImage] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+  const [followedIds, setFollowedIds] = useState<string[]>([]);
   const [postOpen, setPostOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const [opportunityOpen, setOpportunityOpen] = useState(false);
-  const [avatarImage, setAvatarImage] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [applied, setApplied] = useState<string[]>([]);
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -274,16 +278,17 @@ export default function Home() {
   const [dataError, setDataError] = useState("");
   const [loadingData, setLoadingData] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [clockTick, setClockTick] = useState(0);
   const loadVersion = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
-  const avatarInput = useRef<HTMLInputElement>(null);
 
   const visiblePeople = useMemo(() => remotePeople ?? [], [remotePeople]);
   const visibleOpportunities = useMemo(() => remoteOpportunities ?? [], [remoteOpportunities]);
   const connectionCount = Object.values(connectionStatus).filter((status) => status === "connected").length;
   const invitationCount = Object.values(connectionStatus).filter((status) => status === "incoming").length;
+  const visibleUnreadNotificationCount = currentUserId ? unreadNotificationCount : 0;
 
   useEffect(() => {
     if (currentUserId && profile && !profile.onboardingComplete) router.replace("/onboarding");
@@ -308,6 +313,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const targetId = window.location.hash.slice(1);
+    if (!targetId.startsWith("post-") || !posts.some((post) => `post-${post.id}` === targetId)) return;
+    document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [posts]);
+
+  useEffect(() => {
     if (!supabase) return;
 
     let active = true;
@@ -316,6 +327,7 @@ export default function Home() {
       setPosts([]);
       setLiked([]);
       setSavedPostIds([]);
+      setFollowedIds([]);
       setCommentsByPost({});
       setOpenComments(null);
       setRemotePeople([]);
@@ -329,23 +341,26 @@ export default function Home() {
       setLoadingData(true);
       setDataError("");
       try {
-        const [countyResult, profileResult, connectionResult, postResult, opportunityResult, savedPostsResult, talentProfilesResult, talentOptionsResult] = await Promise.all([
+        const [countyResult, profileResult, connectionResult, postResult, opportunityResult, savedPostsResult, followResult, talentProfilesResult, talentOptionsResult] = await Promise.all([
           supabase.from("counties").select("id,name"),
           userId
-            ? supabase.from("profiles").select("id,display_name,headline,bio,role,onboarding_complete,county_id,avatar_url").eq("id", userId).maybeSingle()
+            ? supabase.from("profiles").select("id,display_name,headline,bio,role,onboarding_complete,county_id,avatar_path,avatar_bucket").eq("id", userId).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
           userId
             ? supabase.from("connections").select("requester_id,receiver_id,status").or(`requester_id.eq.${userId},receiver_id.eq.${userId}`)
             : Promise.resolve({ data: [], error: null }),
-          supabase.from("posts").select("id,user_id,content,image_url,created_at").eq("is_published", true).order("created_at", { ascending: false }).limit(30),
+          supabase.from("posts").select("id,user_id,content,image_url,video_url,media_storage_path,created_at").eq("is_published", true).order("created_at", { ascending: false }).limit(30),
           supabase.from("opportunities").select("id,title,description,type,county_id,talent_id,compensation,deadline,companies(name,is_verified,owner_id),counties(name),talents(name)").eq("status", "published").order("created_at", { ascending: false }).limit(100),
           userId
             ? supabase.from("saved_posts").select("post_id").eq("user_id", userId)
             : Promise.resolve({ data: [], error: null }),
+          userId
+            ? supabase.from("talent_follows").select("followed_id").eq("follower_id", userId)
+            : Promise.resolve({ data: [], error: null }),
           supabase.from("talent_profiles").select("user_id,talents(name)"),
           supabase.from("talents").select("id,name").order("name"),
         ]);
-        for (const result of [countyResult, profileResult, connectionResult, postResult, opportunityResult, savedPostsResult, talentProfilesResult, talentOptionsResult]) {
+        for (const result of [countyResult, profileResult, connectionResult, postResult, opportunityResult, savedPostsResult, followResult, talentProfilesResult, talentOptionsResult]) {
           if (result.error) throw result.error;
         }
         if (!active || version !== loadVersion.current) return;
@@ -353,6 +368,7 @@ export default function Home() {
         const countyNames = new Map((countyResult.data ?? []).map((entry) => [entry.id, entry.name]));
         setTalentOptions(talentOptionsResult.data ?? []);
         if (profileResult.data) {
+          const ownAvatarUrl = (await signAvatarUrls(supabase, [profileResult.data])).get(profileResult.data.id) ?? null;
           setProfile({
             id: profileResult.data.id,
             display_name: profileResult.data.display_name,
@@ -362,7 +378,7 @@ export default function Home() {
             onboardingComplete: profileResult.data.onboarding_complete,
             countyId: profileResult.data.county_id,
             countyName: profileResult.data.county_id ? countyNames.get(profileResult.data.county_id) ?? "Kenya" : "Kenya",
-            avatarUrl: profileResult.data.avatar_url,
+            avatarUrl: ownAvatarUrl,
           });
         } else {
           setProfile(null);
@@ -379,21 +395,30 @@ export default function Home() {
         }
         setConnectionStatus(statuses);
         setSavedPostIds((savedPostsResult.data ?? []).map((entry) => entry.post_id));
+        setFollowedIds((followResult.data ?? []).map((entry) => entry.followed_id));
 
         const feedRows = postResult.data ?? [];
         if (feedRows.length) {
           const postIds = feedRows.map((post) => post.id);
           const userIds = [...new Set(feedRows.map((post) => post.user_id))];
-          const [profilesResult, likesResult, commentsResult] = await Promise.all([
-            supabase.from("profiles").select("id,display_name,headline,county_id,avatar_url").in("id", userIds),
+          const [profilesResult, likesResult, commentsResult, mentionsResult] = await Promise.all([
+            supabase.from("profiles").select("id,display_name,headline,county_id,avatar_path,avatar_bucket").in("id", userIds),
             supabase.from("post_likes").select("post_id,user_id").in("post_id", postIds),
             supabase.from("comments").select("post_id").in("post_id", postIds),
+            supabase.from("post_mentions").select("post_id,mentioned_user_id").in("post_id", postIds),
           ]);
-          for (const result of [profilesResult, likesResult, commentsResult]) {
+          for (const result of [profilesResult, likesResult, commentsResult, mentionsResult]) {
             if (result.error) throw result.error;
           }
+          const mentionedIds = [...new Set((mentionsResult.data ?? []).map((mention) => mention.mentioned_user_id))];
+          const { data: mentionedProfiles, error: mentionedProfilesError } = mentionedIds.length
+            ? await supabase.from("profiles").select("id,display_name").in("id", mentionedIds)
+            : { data: [], error: null };
+          if (mentionedProfilesError) throw mentionedProfilesError;
           if (!active || version !== loadVersion.current) return;
+          const profileAvatarUrls = await signAvatarUrls(supabase, profilesResult.data ?? []);
           const profileById = new Map((profilesResult.data ?? []).map((entry) => [entry.id, entry]));
+          const mentionedById = new Map((mentionedProfiles ?? []).map((entry) => [entry.id, entry.display_name]));
           const likeCounts = new Map<string, number>();
           const commentCounts = new Map<string, number>();
           for (const like of likesResult.data ?? []) likeCounts.set(like.post_id, (likeCounts.get(like.post_id) ?? 0) + 1);
@@ -413,8 +438,16 @@ export default function Home() {
               text: post.content,
               likes: likeCounts.get(post.id) ?? 0,
               comments: commentCounts.get(post.id) ?? 0,
-              avatarUrl: author?.avatar_url ?? null,
+              avatarUrl: author ? profileAvatarUrls.get(author.id) ?? null : null,
               imageUrl: post.image_url,
+              videoUrl: post.video_url,
+              mediaPath: post.media_storage_path,
+              mentionedUsers: (mentionsResult.data ?? [])
+                .filter((mention) => mention.post_id === post.id && mentionedById.has(mention.mentioned_user_id))
+                .map((mention) => {
+                  const name = mentionedById.get(mention.mentioned_user_id)!;
+                  return { id: mention.mentioned_user_id, name, handle: name.toLowerCase().replace(/[^a-z0-9]+/g, "") };
+                }),
             };
           }));
         } else {
@@ -427,10 +460,11 @@ export default function Home() {
           const talent = Array.isArray(entry.talents) ? entry.talents[0] : entry.talents;
           if (talent?.name) talentNames.set(entry.user_id, [...(talentNames.get(entry.user_id) ?? []), talent.name]);
         }
-        const peopleQuery = supabase.from("profiles").select("id,display_name,headline,county_id,avatar_url");
+        const peopleQuery = supabase.from("profiles").select("id,display_name,headline,county_id,avatar_path,avatar_bucket");
         const peopleResult = await (userId ? peopleQuery.neq("id", userId) : peopleQuery).limit(30);
         if (peopleResult.error) throw peopleResult.error;
         if (!active || version !== loadVersion.current) return;
+        const peopleAvatarUrls = await signAvatarUrls(supabase, peopleResult.data ?? []);
         setRemotePeople((peopleResult.data ?? []).map((entry, index) => ({
           id: entry.id,
           name: entry.display_name,
@@ -439,7 +473,7 @@ export default function Home() {
           talent: talentNames.get(entry.id)?.join(", ") || entry.headline || "",
           initials: getInitials(entry.display_name),
           tone: ["green", "rose", "blue", "gold", "violet", "orange"][index % 6],
-          avatarUrl: entry.avatar_url,
+          avatarUrl: peopleAvatarUrls.get(entry.id) ?? null,
         })));
 
         const mappedOpportunities = (opportunityResult.data ?? []).map((entry) => {
@@ -552,7 +586,7 @@ export default function Home() {
     const refreshPost = async (postId: string) => {
       const { data: post, error: postError } = await supabase
         .from("posts")
-        .select("id,user_id,content,image_url,created_at")
+        .select("id,user_id,content,image_url,video_url,media_storage_path,created_at")
         .eq("id", postId)
         .eq("is_published", true)
         .maybeSingle();
@@ -572,12 +606,13 @@ export default function Home() {
         return;
       }
 
-      const [authorResult, likesResult, commentsResult] = await Promise.all([
-        supabase.from("profiles").select("id,display_name,headline,avatar_url,county_id").eq("id", post.user_id).maybeSingle(),
+      const [authorResult, likesResult, commentsResult, mentionsResult] = await Promise.all([
+        supabase.from("profiles").select("id,display_name,headline,avatar_path,avatar_bucket,county_id").eq("id", post.user_id).maybeSingle(),
         supabase.from("post_likes").select("user_id", { count: "exact" }).eq("post_id", postId),
         supabase.from("comments").select("id,user_id,content").eq("post_id", postId).order("created_at", { ascending: true }),
+        supabase.from("post_mentions").select("mentioned_user_id").eq("post_id", postId),
       ]);
-      for (const result of [authorResult, likesResult, commentsResult]) {
+      for (const result of [authorResult, likesResult, commentsResult, mentionsResult]) {
         if (result.error) {
           if (active) setDataError(result.error.message);
           return;
@@ -588,18 +623,19 @@ export default function Home() {
       const author = authorResult.data;
       const authorName = author?.display_name ?? "TalantaLink member";
       const commentRows = commentsResult.data ?? [];
-      const authorIds = [...new Set([post.user_id, ...commentRows.map((comment) => comment.user_id)])];
+      const mentionedIds = [...new Set((mentionsResult.data ?? []).map((mention) => mention.mentioned_user_id))];
+      const authorIds = [...new Set([post.user_id, ...commentRows.map((comment) => comment.user_id), ...mentionedIds])];
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select("id,display_name,avatar_url")
+        .select("id,display_name,avatar_path,avatar_bucket")
         .in("id", authorIds);
       if (profilesError) {
         if (active) setDataError(profilesError.message);
         return;
       }
       if (!active) return;
+      const profileAvatarUrls = await signAvatarUrls(supabase, profiles ?? []);
       const names = new Map((profiles ?? []).map((entry) => [entry.id, entry.display_name]));
-      const avatarUrls = new Map((profiles ?? []).map((entry) => [entry.id, entry.avatar_url]));
       const countyName = author?.county_id ? countyIds[author.county_id - 1] : undefined;
       const updatedPost: FeedPost = {
         id: post.id,
@@ -612,8 +648,14 @@ export default function Home() {
         text: post.content,
         likes: likesResult.count ?? 0,
         comments: commentRows.length,
-        avatarUrl: author?.avatar_url ?? null,
+        avatarUrl: author ? profileAvatarUrls.get(author.id) ?? null : null,
         imageUrl: post.image_url,
+        videoUrl: post.video_url,
+        mediaPath: post.media_storage_path,
+        mentionedUsers: (mentionsResult.data ?? []).flatMap((mention) => {
+          const name = names.get(mention.mentioned_user_id);
+          return name ? [{ id: mention.mentioned_user_id, name, handle: name.toLowerCase().replace(/[^a-z0-9]+/g, "") }] : [];
+        }),
       };
       setPosts((current) => [updatedPost, ...current.filter((entry) => entry.id !== postId)]
         .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
@@ -622,7 +664,7 @@ export default function Home() {
         ...current,
         [postId]: commentRows.map((comment) => {
           const name = names.get(comment.user_id) ?? "TalantaLink member";
-          return { id: comment.id, name, initials: getInitials(name), text: comment.content, avatarUrl: avatarUrls.get(comment.user_id) ?? null };
+          return { id: comment.id, userId: comment.user_id, name, initials: getInitials(name), text: comment.content, avatarUrl: profileAvatarUrls.get(comment.user_id) ?? null };
         }),
       }));
       setDataError("");
@@ -660,6 +702,49 @@ export default function Home() {
       void supabase.removeChannel(channel);
     };
   }, [supabase]);
+
+  useEffect(() => {
+    if (!supabase || !currentUserId) return;
+
+    let active = true;
+    const refreshUnreadCount = async () => {
+      const { count, error } = await supabase
+        .from("user_notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("recipient_id", currentUserId)
+        .is("read_at", null);
+      if (!active) return;
+      if (error) {
+        setDataError(`Could not load unread notifications: ${error.message}`);
+        return;
+      }
+      setUnreadNotificationCount(count ?? 0);
+    };
+
+    void refreshUnreadCount();
+    const channel = supabase
+      .channel(`talantalink-notification-count-${currentUserId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_notifications",
+          filter: `recipient_id=eq.${currentUserId}`,
+        },
+        () => void refreshUnreadCount(),
+      )
+      .subscribe((status) => {
+        if (active && (status === "CHANNEL_ERROR" || status === "TIMED_OUT")) {
+          setDataError("Live notification counts are unavailable. Check the Supabase Realtime setup.");
+        }
+      });
+
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, supabase]);
 
   const filteredPeople = useMemo(() => visiblePeople.filter((person) => {
     const matchesCounty = county === "All counties" || person.county === county;
@@ -705,13 +790,14 @@ export default function Home() {
       return;
     }
     const { data: members, error: membersError } = await supabase.from("profiles")
-      .select("id,display_name,headline,avatar_url")
+      .select("id,display_name,headline,avatar_path,avatar_bucket")
       .in("id", participantIds);
     if (membersError) {
       if (active) setDataError(membersError.message);
       return;
     }
     if (!active) return;
+    const memberAvatarUrls = await signAvatarUrls(supabase, members ?? []);
     const membersById = new Map((members ?? []).map((member) => [member.id, member]));
     const conversationsById = new Map<string, Conversation>();
     for (const row of rows ?? []) {
@@ -722,7 +808,7 @@ export default function Home() {
         userId,
         name: member.display_name,
         headline: member.headline || "TalantaLink member",
-        avatarUrl: member.avatar_url,
+        avatarUrl: memberAvatarUrls.get(member.id) ?? null,
         lastMessage: row.content,
         lastMessageAt: row.created_at,
         unread: 0,
@@ -800,10 +886,6 @@ export default function Home() {
       router.push("/auth");
       return;
     }
-    if (!["employer", "recruiter", "administrator"].includes(profile?.role ?? "")) {
-      setFeedback("Campaign drafts are available to employer and recruiter accounts.");
-      return;
-    }
     const isSaved = savedPostIds.includes(postId);
     setBusy(true);
     try {
@@ -819,8 +901,54 @@ export default function Home() {
     }
   }
 
+  async function toggleFollow(person: Person) {
+    if (!supabase || !currentUserId) {
+      router.push("/auth");
+      return;
+    }
+    if (!person.id || person.id === currentUserId) return;
+    const alreadyFollowing = followedIds.includes(person.id);
+    setBusy(true);
+    try {
+      const result = alreadyFollowing
+        ? await supabase.from("talent_follows").delete().eq("follower_id", currentUserId).eq("followed_id", person.id)
+        : await supabase.from("talent_follows").insert({ follower_id: currentUserId, followed_id: person.id });
+      if (result.error) throw result.error;
+      setFollowedIds((current) => alreadyFollowing ? current.filter((id) => id !== person.id) : [...current, person.id]);
+      setFeedback(alreadyFollowing ? `You unfollowed ${person.name}.` : `You are now following ${person.name}.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not update this follow.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reportContent(targetType: "post" | "comment" | "profile", targetId: string) {
+    if (!supabase || !currentUserId) {
+      router.push("/auth");
+      return;
+    }
+    const reason = window.prompt(`Why are you reporting this ${targetType}?`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setFeedback("Add a reason before submitting a report.");
+      return;
+    }
+    const { error } = await supabase.from("content_reports").insert({
+      reporter_id: currentUserId,
+      target_type: targetType,
+      target_id: targetId,
+      reason: reason.trim().slice(0, 1000),
+    });
+    if (error) {
+      setFeedback(error.code === "23505" ? "You have already reported this content." : `Could not submit report: ${error.message}`);
+      return;
+    }
+    setFeedback("Thank you. Your report was sent to the moderation team.");
+  }
+
   async function sharePost(post: FeedPost) {
-    const url = `${window.location.origin}/?post=${encodeURIComponent(post.id)}`;
+    const url = `${window.location.origin}/posts/${encodeURIComponent(post.id)}`;
     try {
       if (navigator.share) await navigator.share({ title: `TalantaLink post by ${post.name}`, text: post.text, url });
       else {
@@ -838,10 +966,16 @@ export default function Home() {
     if (!window.confirm("Delete this post? This cannot be undone.")) return;
     setBusy(true);
     try {
-      const { error } = await supabase.from("posts").delete().eq("id", post.id).eq("user_id", currentUserId);
+      const { data: deletedPost, error } = await supabase.from("posts")
+        .delete().eq("id", post.id).eq("user_id", currentUserId).select("media_storage_path").maybeSingle();
       if (error) throw error;
       setPosts((current) => current.filter((entry) => entry.id !== post.id));
       setSavedPostIds((current) => current.filter((id) => id !== post.id));
+      const mediaPath = deletedPost?.media_storage_path ?? post.mediaPath;
+      if (mediaPath) {
+        const { error: storageError } = await supabase.storage.from("talantalink-posts").remove([mediaPath]);
+        if (storageError) setFeedback(`Your post was deleted, but its media file could not be removed: ${storageError.message}`);
+      }
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Could not delete the post.");
     } finally {
@@ -899,22 +1033,6 @@ export default function Home() {
     setSection("Messages");
   }
 
-  function chooseAvatarImage(file?: File) {
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(file.type)) {
-      setFeedback("Choose a JPEG, PNG, WebP or AVIF profile photo.");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setFeedback("Choose a profile photo smaller than 5 MB.");
-      return;
-    }
-    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-    setAvatarImage(file);
-    setAvatarPreview(URL.createObjectURL(file));
-    setFeedback("");
-  }
-
   async function toggleConnection(person: Person) {
     if (!supabase) {
       setFeedback("Connect Supabase to send and manage real connection requests.");
@@ -961,13 +1079,15 @@ export default function Home() {
 
   function choosePostImage(file?: File) {
     if (!file) return;
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-    if (!allowedTypes.includes(file.type)) {
-      setFeedback("Choose a JPEG, PNG, WebP or AVIF image.");
+    const imageTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+    const videoTypes = ["video/mp4", "video/webm"];
+    if (![...imageTypes, ...videoTypes].includes(file.type)) {
+      setFeedback("Choose a JPEG, PNG, WebP, AVIF, MP4 or WebM file.");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setFeedback("Choose an image smaller than 5 MB.");
+    const maxSize = videoTypes.includes(file.type) ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setFeedback(videoTypes.includes(file.type) ? "Choose a video smaller than 50 MB." : "Choose an image smaller than 5 MB.");
       return;
     }
     if (postImagePreview) URL.revokeObjectURL(postImagePreview);
@@ -984,6 +1104,12 @@ export default function Home() {
     if (photoInput.current) photoInput.current.value = "";
   }
 
+  function selectMention(person: Person) {
+    const handle = person.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    setPostText((current) => current.replace(/(^|\s)@[a-z0-9._-]*$/i, `$1@${handle} `));
+    setMentionedUserIds((current) => current.includes(person.id) ? current : [...current, person.id]);
+  }
+
   async function submitPost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = postText.trim();
@@ -991,6 +1117,12 @@ export default function Home() {
       setFeedback("Add a short caption before publishing your post.");
       return;
     }
+    const activeMentionIds = mentionedUserIds.filter((id) => {
+      const person = visiblePeople.find((entry) => entry.id === id);
+      if (!person) return false;
+      const handle = person.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+      return content.toLowerCase().includes(`@${handle}`);
+    });
     if (!supabase) {
       setFeedback("Connect Supabase to publish community updates.");
       return;
@@ -1005,25 +1137,37 @@ export default function Home() {
       let uploadedPath: string | null = null;
       try {
         let imageUrl: string | null = null;
+        let videoUrl: string | null = null;
         if (postImage) {
           const extensionByType: Record<string, string> = {
             "image/jpeg": "jpg",
             "image/png": "png",
             "image/webp": "webp",
             "image/avif": "avif",
+            "video/mp4": "mp4",
+            "video/webm": "webm",
           };
           const extension = extensionByType[postImage.type];
-          if (!extension) throw new Error("Choose a JPEG, PNG, WebP or AVIF image.");
+          if (!extension) throw new Error("Choose a supported photo or video.");
           uploadedPath = `${currentUserId}/${crypto.randomUUID()}.${extension}`;
           const { error: uploadError } = await supabase.storage
             .from("talantalink-posts")
             .upload(uploadedPath, postImage, { contentType: postImage.type, cacheControl: "3600" });
           if (uploadError) throw uploadError;
-          imageUrl = supabase.storage.from("talantalink-posts").getPublicUrl(uploadedPath).data.publicUrl;
+          const mediaUrl = supabase.storage.from("talantalink-posts").getPublicUrl(uploadedPath).data.publicUrl;
+          if (postImage.type.startsWith("video/")) videoUrl = mediaUrl;
+          else imageUrl = mediaUrl;
         }
+        const hashtags = [...new Set(content.match(/#[\p{L}\p{N}_]+/gu)?.map((tag) => tag.slice(1).toLowerCase()) ?? [])];
         const { data: createdPost, error } = await supabase.from("posts")
-          .insert({ user_id: currentUserId, content, image_url: imageUrl }).select("id,created_at").single();
+          .insert({ user_id: currentUserId, content, image_url: imageUrl, video_url: videoUrl, media_storage_path: uploadedPath, hashtag_terms: hashtags }).select("id,created_at").single();
         if (error) throw error;
+        if (activeMentionIds.length) {
+          const { error: mentionError } = await supabase.from("post_mentions").insert(
+            [...new Set(activeMentionIds)].map((mentionedUserId) => ({ post_id: createdPost.id, mentioned_user_id: mentionedUserId })),
+          );
+          if (mentionError) setFeedback(`Your post was published, but mentions could not be saved: ${mentionError.message}`);
+        }
         const displayName = profile?.display_name ?? "You";
         setPosts((current) => [{
           id: createdPost.id,
@@ -1038,9 +1182,15 @@ export default function Home() {
           comments: 0,
           avatarUrl: profile?.avatarUrl,
           imageUrl,
+          videoUrl,
+          mediaPath: uploadedPath,
+          mentionedUsers: activeMentionIds.flatMap((id) => {
+            const person = visiblePeople.find((entry) => entry.id === id);
+            return person ? [{ id, name: person.name, handle: person.name.toLowerCase().replace(/[^a-z0-9]+/g, "") }] : [];
+          }),
         }, ...current]);
         uploadedPath = null;
-        setFeedback("Your post was published.");
+        if (!activeMentionIds.length) setFeedback("Your post was published.");
       } catch (error) {
         let message = error instanceof Error ? error.message : "Could not publish your post.";
         if (uploadedPath) {
@@ -1052,6 +1202,7 @@ export default function Home() {
         return;
       }
       setPostText("");
+      setMentionedUserIds([]);
       clearPostImage();
       setPostOpen(false);
       setBusy(false);
@@ -1094,16 +1245,17 @@ export default function Home() {
       if (error) throw error;
       const userIds = [...new Set((commentRows ?? []).map((comment) => comment.user_id))];
       const { data: authors, error: authorError } = userIds.length
-        ? await supabase.from("profiles").select("id,display_name,avatar_url").in("id", userIds)
+        ? await supabase.from("profiles").select("id,display_name,avatar_path,avatar_bucket").in("id", userIds)
         : { data: [], error: null };
       if (authorError) throw authorError;
+      const authorAvatarUrls = await signAvatarUrls(supabase, authors ?? []);
       const authorsById = new Map((authors ?? []).map((author) => [author.id, author]));
       setCommentsByPost((current) => ({
         ...current,
         [postId]: (commentRows ?? []).map((comment) => {
           const author = authorsById.get(comment.user_id);
           const name = author?.display_name ?? "TalantaLink member";
-          return { id: comment.id, name, initials: getInitials(name), text: comment.content, avatarUrl: author?.avatar_url ?? null };
+          return { id: comment.id, userId: comment.user_id, name, initials: getInitials(name), text: comment.content, avatarUrl: author ? authorAvatarUrls.get(author.id) ?? null : null };
         }),
       }));
     } catch (error) {
@@ -1133,7 +1285,7 @@ export default function Home() {
       const name = profile?.display_name ?? "You";
       setCommentsByPost((current) => ({
         ...current,
-        [postId]: [...(current[postId] ?? []), { id: data.id, name, initials: getInitials(name), text: content, avatarUrl: profile?.avatarUrl }],
+        [postId]: [...(current[postId] ?? []), { id: data.id, userId: currentUserId, name, initials: getInitials(name), text: content, avatarUrl: profile?.avatarUrl }],
       }));
       setPosts((current) => current.map((post) => post.id === postId ? { ...post, comments: post.comments + 1 } : post));
       setCommentDraft("");
@@ -1148,83 +1300,6 @@ export default function Home() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) setFeedback(error.message);
-  }
-
-  async function submitProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!supabase) {
-      setFeedback("Connect Supabase to create and save a member profile.");
-      return;
-    }
-    if (!currentUserId) {
-      router.push("/auth");
-      return;
-    }
-    const formData = new FormData(event.currentTarget);
-    const displayName = String(formData.get("displayName") ?? "").trim();
-    const headline = String(formData.get("headline") ?? "").trim();
-    const bio = String(formData.get("bio") ?? "").trim();
-    const countyValue = String(formData.get("county") ?? "");
-    const countyId = countyIdByName.get(countyValue) ?? null;
-    if (!displayName) return;
-
-    if (currentUserId) {
-      setBusy(true);
-      setFeedback("");
-      let avatarPath: string | null = null;
-      try {
-        let avatarUrl = profile?.avatarUrl ?? null;
-        if (avatarImage) {
-          const extensionByType: Record<string, string> = {
-            "image/jpeg": "jpg",
-            "image/png": "png",
-            "image/webp": "webp",
-            "image/avif": "avif",
-          };
-          const extension = extensionByType[avatarImage.type];
-          if (!extension) throw new Error("Choose a JPEG, PNG, WebP or AVIF profile photo.");
-          avatarPath = `${currentUserId}/${crypto.randomUUID()}.${extension}`;
-          const { error: uploadError } = await supabase.storage.from("talantalink-avatars")
-            .upload(avatarPath, avatarImage, { contentType: avatarImage.type, cacheControl: "3600" });
-          if (uploadError) throw uploadError;
-          avatarUrl = supabase.storage.from("talantalink-avatars").getPublicUrl(avatarPath).data.publicUrl;
-        }
-        const { error } = await supabase.from("profiles")
-          .update({ display_name: displayName, headline, bio, county_id: countyId, avatar_url: avatarUrl })
-          .eq("id", currentUserId);
-        if (error) throw error;
-        const countyName = countyId ? countyIds[countyId - 1] ?? "Kenya" : "Kenya";
-        setProfile({
-          id: currentUserId,
-          display_name: displayName,
-          headline,
-          bio,
-          role: profile?.role ?? "talent",
-          onboardingComplete: profile?.onboardingComplete ?? false,
-          countyId,
-          countyName,
-          avatarUrl,
-        });
-        avatarPath = null;
-        if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-        setAvatarPreview(null);
-        setAvatarImage(null);
-        if (avatarInput.current) avatarInput.current.value = "";
-        setFeedback("Profile updated.");
-        setProfileOpen(false);
-      } catch (error) {
-        let message = error instanceof Error ? error.message : "Could not update your profile.";
-        if (avatarPath) {
-          const { error: cleanupError } = await supabase.storage.from("talantalink-avatars").remove([avatarPath]);
-          if (cleanupError) message += ` The uploaded profile photo could not be removed: ${cleanupError.message}`;
-        }
-        setFeedback(message);
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
   }
 
   async function submitOpportunity(event: FormEvent<HTMLFormElement>) {
@@ -1435,6 +1510,13 @@ export default function Home() {
   );
 
   function renderPosts() {
+    const mentionMatch = postText.match(/(?:^|\s)@([a-z0-9._-]*)$/i);
+    const mentionSuggestions = mentionMatch
+      ? visiblePeople
+        .filter((person) => person.id !== currentUserId)
+        .filter((person) => person.name.toLowerCase().replace(/[^a-z0-9]+/g, "").startsWith(mentionMatch[1].toLowerCase()))
+        .slice(0, 5)
+      : [];
     return (
       <>
         <form className={`composer card ${postOpen ? "composer-open" : ""}`} onSubmit={submitPost}>
@@ -1445,23 +1527,28 @@ export default function Home() {
             </button>
           </div>
           {postOpen && (
-            <textarea autoFocus value={postText} onChange={(event) => setPostText(event.target.value)} placeholder="Tell us what you&apos;re creating, learning or looking for..." aria-label="Write a post" maxLength={5000} />
+            <div className="post-compose-field">
+              <textarea autoFocus value={postText} onChange={(event) => setPostText(event.target.value)} placeholder="Tell us what you&apos;re creating, learning or looking for... Use #hashtags or @mentions." aria-label="Write a post" maxLength={5000} />
+              {mentionSuggestions.length > 0 && <div className="mention-suggestions" role="listbox" aria-label="People to mention">{mentionSuggestions.map((person) => <button type="button" key={person.id} onClick={() => selectMention(person)}><Avatar initials={person.initials} tone={person.tone} size="small" image={person.avatarUrl ?? undefined} /><span><strong>{person.name}</strong><small>@{person.name.toLowerCase().replace(/[^a-z0-9]+/g, "")}</small></span></button>)}</div>}
+            </div>
           )}
           {postImagePreview && <div className="post-photo-preview">
-            <Image src={postImagePreview} alt="Selected photo preview" width={1200} height={900} unoptimized />
+            {postImage?.type.startsWith("video/")
+              ? <video src={postImagePreview} aria-label="Selected video preview" controls />
+              : <Image src={postImagePreview} alt="Selected photo preview" width={1200} height={900} unoptimized />}
             <button type="button" className="icon-button" onClick={clearPostImage} aria-label="Remove selected photo"><Icon name="close" size={17} /></button>
           </div>}
-          {postImagePreview && <p className="post-photo-note">Photos are public with your post · Up to 5 MB</p>}
+          {postImagePreview && <p className="post-photo-note">{postImage?.type.startsWith("video/") ? "Videos are public with your post · Up to 50 MB" : "Photos are public with your post · Up to 5 MB"}</p>}
           <input
             ref={photoInput}
             className="visually-hidden"
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/avif"
-            aria-label="Choose a photo"
+            accept="image/jpeg,image/png,image/webp,image/avif,video/mp4,video/webm"
+            aria-label="Choose a photo or video"
             onChange={(event) => choosePostImage(event.target.files?.[0])}
           />
           <div className="composer-actions">
-            <button type="button" className="quiet-button" disabled={!currentUserId} onClick={() => photoInput.current?.click()}><Icon name="image" size={17} /> Add a photo</button>
+            <button type="button" className="quiet-button" disabled={!currentUserId} onClick={() => photoInput.current?.click()}><Icon name="image" size={17} /> Add photo or video</button>
             <button type="button" className="quiet-button" onClick={() => setSection("Jobs")}><Icon name="briefcase" size={17} /> Explore opportunities</button>
             {currentUserId
               ? postOpen
@@ -1478,23 +1565,36 @@ export default function Home() {
           const isLiked = liked.includes(post.id);
           const isSaved = savedPostIds.includes(post.id);
           return (
-            <article className="post card" key={post.id}>
+            <article className="post card" id={`post-${post.id}`} key={post.id}>
               <div className="post-header">
-                <Avatar initials={post.initials} tone={post.tone} image={post.avatarUrl ?? undefined} />
-                <div className="post-author"><strong>{post.name}</strong><span>{post.role}</span><small><time dateTime={post.createdAt}>{formatRelativeTime(post.createdAt)}</time> <span>·</span> <span className="public-dot">●</span></small></div>
+                <Link href={`/talent/${post.userId}`} aria-label={`View ${post.name}'s profile`}><Avatar initials={post.initials} tone={post.tone} image={post.avatarUrl ?? undefined} /></Link>
+                <div className="post-author"><Link href={`/talent/${post.userId}`}><strong>{post.name}</strong></Link><span>{post.role}</span><small><time dateTime={post.createdAt}>{formatRelativeTime(post.createdAt)}</time> <span>·</span> <span className="public-dot">●</span></small></div>
               </div>
-              <p className="post-copy">{post.text}</p>
+              <p className="post-copy">{post.text.split(/(#[\p{L}\p{N}_]+|@[a-z0-9._-]+)/giu).map((part, index) => {
+                if (part.startsWith("#")) {
+                  return <button className="post-hashtag" type="button" key={`${post.id}-${index}`} onClick={() => { setSection("Home"); setQuery(part); }}>{part}</button>;
+                }
+                if (part.startsWith("@")) {
+                  const mentioned = post.mentionedUsers?.find((person) => `@${person.handle}`.toLowerCase() === part.toLowerCase());
+                  return mentioned
+                    ? <Link className="post-mention" href={`/talent/${mentioned.id}`} key={`${post.id}-${index}`}>{part}</Link>
+                    : part;
+                }
+                return part;
+              })}</p>
               {post.imageUrl && <Image className="post-media" src={post.imageUrl} alt={`Photo shared by ${post.name}`} width={1200} height={900} sizes="(max-width: 720px) 100vw, 720px" unoptimized />}
+              {post.videoUrl && <video className="post-media" src={post.videoUrl} controls preload="metadata" aria-label={`Video shared by ${post.name}`} />}
               <div className="post-stats"><span>{post.likes} appreciations</span><span>{post.comments} comments</span></div>
               <div className="post-actions">
                 <button className={isLiked ? "liked" : ""} disabled={busy} onClick={() => void toggleLike(post.id)}><Icon name="heart" size={17} /> {isLiked ? "Appreciated" : "Appreciate"}</button>
                 <button onClick={() => void showComments(post.id)}><Icon name="comment" size={17} /> Comment</button>
                 <button onClick={() => void sharePost(post)}><Icon name="share" size={17} /> Share</button>
                 <button className={isSaved ? "liked" : ""} disabled={busy} onClick={() => void toggleSavedPost(post.id)} aria-label={isSaved ? "Remove saved post" : "Save post"}><Icon name="bookmark" size={17} /> {isSaved ? "Saved" : "Save"}</button>
+                {currentUserId !== post.userId && <button className="post-delete-button" disabled={busy} onClick={() => void reportContent("post", post.id)} aria-label="Report post">Report</button>}
                 {currentUserId === post.userId && <button className="post-delete-button" disabled={busy} onClick={() => void removePost(post)} aria-label="Delete your post"><Icon name="close" size={17} /> Delete</button>}
               </div>
               {openComments === post.id && <div className="comments-panel">
-                {(commentsByPost[String(post.id)] ?? []).map((comment) => <div className="comment-row" key={comment.id}><Avatar initials={comment.initials} tone="green" size="small" image={comment.avatarUrl ?? undefined} /><p><strong>{comment.name}</strong><span>{comment.text}</span></p></div>)}
+                {(commentsByPost[String(post.id)] ?? []).map((comment) => <div className="comment-row" key={comment.id}><Avatar initials={comment.initials} tone="green" size="small" image={comment.avatarUrl ?? undefined} /><p><strong>{comment.name}</strong><span>{comment.text}</span></p>{currentUserId && comment.userId !== currentUserId && <button className="text-button" onClick={() => void reportContent("comment", comment.id)}>Report</button>}</div>)}
                 {!supabase && <p className="comment-hint">Sign in with Supabase to add comments to published posts.</p>}
                 <form className="comment-form" onSubmit={(event) => void submitComment(event, post.id)}><input value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder={supabase ? "Write a comment..." : "Comments require a connected account"} aria-label="Write a comment" disabled={!supabase || busy} /><button type="submit" disabled={!supabase || busy || !commentDraft.trim()} aria-label="Submit comment"><Icon name="send" size={15} /></button></form>
               </div>}
@@ -1520,15 +1620,17 @@ export default function Home() {
           {filteredPeople.map((person) => {
             const status = connectionStatus[person.id ?? person.name];
             return (
-            <article className="person-card card" key={person.name}>
+            <article className="person-card card" key={person.id ?? person.name}>
               <div className={`person-cover cover-${person.tone}`}><span className="cover-star">✳</span></div>
-              <Avatar initials={person.initials} tone={person.tone} size="large" image={person.avatarUrl ?? undefined} />
-              <div className="person-info"><strong>{person.name}</strong><span>{person.role}</span><small><Icon name="map" size={13} /> {person.county === "Kenya" ? "Kenya" : `${person.county} County`}</small></div>
+              <Link href={`/talent/${person.id}`} aria-label={`View ${person.name}'s profile`}><Avatar initials={person.initials} tone={person.tone} size="large" image={person.avatarUrl ?? undefined} /></Link>
+              <div className="person-info"><Link href={`/talent/${person.id}`}><strong>{person.name}</strong></Link><span>{person.role}</span><small><Icon name="map" size={13} /> {person.county === "Kenya" ? "Kenya" : `${person.county} County`}</small></div>
+              {currentUserId && person.id && <button className="outline-button" disabled={busy} onClick={() => void toggleFollow(person)}>{followedIds.includes(person.id) ? "Following" : "Follow"}</button>}
               {status === "incoming"
                 ? <div className="person-actions"><button className="connect-button" disabled={busy} onClick={() => void respondToConnection(person, "accepted")}><Icon name="check" size={16} /> Accept</button><button className="outline-button" disabled={busy} onClick={() => void respondToConnection(person, "rejected")}>Decline</button></div>
                 : status === "connected"
                   ? <div className="person-actions"><button className="connect-button is-connected" disabled><Icon name="check" size={16} /> Connected</button><button className="outline-button" onClick={() => openConversation(person)}>Message</button></div>
                   : <button className="connect-button" disabled={busy || status === "declined"} onClick={() => void toggleConnection(person)}><Icon name={status === "pending" ? "close" : "plus"} size={16} /> {status === "pending" ? "Cancel request" : status === "declined" ? "Request declined" : "Connect"}</button>}
+              {currentUserId && person.id !== currentUserId && <button className="text-button profile-report-button" disabled={busy} onClick={() => void reportContent("profile", person.id)}>Report profile</button>}
             </article>
           );})}
           {!loadingData && filteredPeople.length === 0 && <div className="empty-state card">{supabase ? "No members match these filters yet. Try another county or search." : "Connect Supabase and sign in to discover real community members."}</div>}
@@ -1666,7 +1768,7 @@ export default function Home() {
     if (section === "Saved posts") return renderPosts();
     return (
       <>
-        <div className="welcome-strip"><span className="welcome-kicker">KENYA’S TALENT COMMUNITY</span><h1>Good work deserves to be seen.</h1><p>Share what you&apos;re building, meet people who get it, and discover opportunities across Kenya.</p></div>
+        <div className="welcome-strip"><span className="welcome-kicker">KENYA’S TALENT COMMUNITY</span><h1>Good work deserves to be seen.</h1><p>Share what you&apos;re building, meet people who get it, and discover opportunities across Kenya.</p><div className="community-explore-links"><Link href="/discover">Discover talent <span>→</span></Link><Link href="/opportunities">Browse opportunities <span>→</span></Link><Link href="/inbox">Private inbox <span>→</span></Link></div></div>
         {renderPosts()}
       </>
     );
@@ -1688,7 +1790,7 @@ export default function Home() {
             </button>
           ))}
         </nav>
-        <div className="topbar-actions"><span className={`connection-badge ${realtimeConnected ? "is-live" : ""}`}><span /> {realtimeConnected ? "LIVE" : configured ? "CONNECTING" : "OFFLINE"}</span><button className="icon-button notification-button" aria-label={`${invitationCount} connection requests`} onClick={() => { setSection("My Network"); setNetworkFilter("incoming"); }}><Icon name="bell" size={19} />{invitationCount > 0 && <i />}</button><div className="topbar-divider" />{currentUserId && supabase ? <button className="profile-menu" onClick={() => void signOut()}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="small" image={profile?.avatarUrl ?? undefined} /><span>{profile?.display_name ?? "Account"}</span><span className="chevron">↪</span></button> : <Link className="profile-menu" href="/auth"><Avatar initials="TL" tone="green" size="small" /><span>Sign in</span><span className="chevron">→</span></Link>}</div>
+        <div className="topbar-actions"><span className={`connection-badge ${realtimeConnected ? "is-live" : ""}`}><span /> {realtimeConnected ? "LIVE" : configured ? "CONNECTING" : "OFFLINE"}</span><Link className="icon-button notification-button" aria-label={`Notification centre${visibleUnreadNotificationCount ? `, ${visibleUnreadNotificationCount} unread` : ""}`} href="/notifications"><Icon name="bell" size={19} />{visibleUnreadNotificationCount > 0 && <span className="notification-count">{visibleUnreadNotificationCount > 99 ? "99+" : visibleUnreadNotificationCount}</span>}</Link><div className="topbar-divider" />{currentUserId && supabase ? <button className="profile-menu" onClick={() => void signOut()}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="small" image={profile?.avatarUrl ?? undefined} /><span>{profile?.display_name ?? "Account"}</span><span className="chevron">↪</span></button> : <Link className="profile-menu" href="/auth"><Avatar initials="TL" tone="green" size="small" /><span>Sign in</span><span className="chevron">→</span></Link>}</div>
       </header>
 
       <div className="app-layout">
@@ -1698,10 +1800,13 @@ export default function Home() {
             <Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="large" image={profile?.avatarUrl ?? undefined} />
             <div className="sidebar-profile-info"><strong>{profile?.display_name ?? (currentUserId ? "Complete your profile" : "Welcome to TalantaLink")}</strong><span>{profile?.headline || (currentUserId ? "Add a headline to introduce yourself" : "A community for Kenya’s talent")}</span><small><Icon name="map" size={13} /> {profile?.countyName ?? "Across Kenya"}</small></div>
             {profile?.bio && <p className="profile-bio">{profile.bio}</p>}
-            <button className="profile-edit" onClick={() => currentUserId ? setProfileOpen(true) : router.push("/auth")}>{currentUserId ? "Edit your profile" : "Join the community"} <Icon name="arrow" size={14} /></button>
+            <button className="profile-edit" onClick={() => currentUserId ? router.push("/profile/edit") : router.push("/auth")}>{currentUserId ? "Edit your profile" : "Join the community"} <Icon name="arrow" size={14} /></button>
           </div>
           <nav className="side-nav" aria-label="Main navigation">
             <p className="nav-label">YOUR SPACE</p>
+            <Link className="nav-item" href="/discover"><Icon name="search" size={18} /><span>Discover talent</span></Link>
+            <Link className="nav-item" href="/opportunities"><Icon name="briefcase" size={18} /><span>Opportunity marketplace</span></Link>
+            <Link className="nav-item" href="/inbox"><Icon name="message" size={18} /><span>Private inbox</span></Link>
             {navItems.filter((item) => item.label === "Investors" || item.label === "Campaigns" || item.label === "Saved posts").map((item) => <button key={item.label} className={`nav-item ${section === item.label ? "nav-active" : ""}`} onClick={() => setSection(item.label)}><Icon name={item.icon} size={18} /><span>{item.label === "Investors" ? "Funding & partners" : item.label}</span></button>)}
           </nav>
           <div className="sidebar-promo">
@@ -1730,20 +1835,6 @@ export default function Home() {
           <div className="right-footer"><span>Kenya <span className="kenya-dots"><i /><i /><i /></span></span><span>Built for every talent.</span></div>
         </aside>
       </div>
-
-      {profileOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfileOpen(false); }}>
-        <form className="modal-card" onSubmit={(event) => void submitProfile(event)}>
-          <div className="modal-heading"><div><p className="eyebrow">YOUR TALENT, YOUR STORY</p><h2>Edit your profile</h2></div><button type="button" className="icon-button" aria-label="Close dialog" onClick={() => setProfileOpen(false)}><Icon name="close" /></button></div>
-          <p className="modal-description">Your profile is visible to other TalantaLink members.</p>
-          <button type="button" className="profile-avatar-picker" onClick={() => avatarInput.current?.click()}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="large" image={avatarPreview ?? profile?.avatarUrl ?? undefined} /><span>Choose a profile photo</span></button>
-          <input ref={avatarInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={(event) => chooseAvatarImage(event.target.files?.[0])} />
-          <label>Your name<input name="displayName" required maxLength={100} defaultValue={profile?.display_name ?? ""} /></label>
-          <label>Professional headline<input name="headline" maxLength={160} placeholder="e.g. Dancer and choreographer" defaultValue={profile?.headline ?? ""} /></label>
-          <label>About you<textarea name="bio" maxLength={2000} rows={4} placeholder="Share your experience, interests and what you’re looking for." defaultValue={profile?.bio ?? ""} /></label>
-          <label>County<select name="county" defaultValue={profile?.countyId ? countyIds[profile.countyId - 1] : ""}><option value="">Select a county</option>{counties.map((name) => <option key={name}>{name}</option>)}</select></label>
-          <div className="modal-actions"><button type="button" className="outline-button" onClick={() => setProfileOpen(false)}>Cancel</button><button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save profile"} <Icon name="check" size={15} /></button></div>
-        </form>
-      </div>}
 
       {opportunityOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpportunityOpen(false); }}>
         <form className="modal-card" onSubmit={(event) => void submitOpportunity(event)}>
@@ -1788,7 +1879,7 @@ export default function Home() {
         <button className={section === "Investors" ? "mobile-active" : ""} onClick={() => setSection("Investors")}><Icon name="sparkles" size={20} /><span>Funding</span></button>
         <button className={section === "Campaigns" ? "mobile-active" : ""} onClick={() => setSection("Campaigns")}><Icon name="chart" size={20} /><span>Campaigns</span></button>
         <button className={section === "Saved posts" ? "mobile-active" : ""} onClick={() => setSection("Saved posts")}><Icon name="bookmark" size={20} /><span>Saved</span></button>
-        <button onClick={() => currentUserId ? setProfileOpen(true) : router.push("/auth")}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="small" image={profile?.avatarUrl ?? undefined} /><span>{profile ? "Profile" : "Sign in"}</span></button>
+        <button onClick={() => currentUserId ? router.push("/profile/edit") : router.push("/auth")}><Avatar initials={profile ? getInitials(profile.display_name) : "TL"} tone="green" size="small" image={profile?.avatarUrl ?? undefined} /><span>{profile ? "Profile" : "Sign in"}</span></button>
       </nav>
     </main>
   );

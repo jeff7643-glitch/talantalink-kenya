@@ -17,7 +17,9 @@ export async function getAuthenticatedProfile() {
   const supabase = await createSupabaseServerClient();
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError) {
-    console.error("Supabase could not validate the current session.", userError);
+    if (userError.name !== "AuthSessionMissingError") {
+      console.error("Supabase could not validate the current session.", userError);
+    }
     return null;
   }
   if (!user) return null;
@@ -31,6 +33,10 @@ export async function getAuthenticatedProfile() {
   if (profileError) throw new Error(`Could not load the signed-in profile: ${profileError.message}`);
   if (!profile || !accountRoles.includes(profile.role as AccountRole)) return null;
 
+  const { data: isSuspended, error: suspensionError } = await supabase.rpc("is_current_user_suspended");
+  if (suspensionError) throw new Error(`Could not verify account access: ${suspensionError.message}`);
+  if (isSuspended) return null;
+
   return {
     id: profile.id,
     display_name: profile.display_name,
@@ -41,7 +47,15 @@ export async function getAuthenticatedProfile() {
 
 export async function requireAuthenticatedProfile() {
   const profile = await getAuthenticatedProfile();
-  if (!profile) redirect("/auth");
+  if (!profile) {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: isSuspended } = await supabase.rpc("is_current_user_suspended");
+      if (isSuspended) redirect("/auth?status=suspended");
+    }
+    redirect("/auth");
+  }
   return profile;
 }
 

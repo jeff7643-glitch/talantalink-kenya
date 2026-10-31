@@ -1,0 +1,131 @@
+.page {
+  min-height: 100vh;
+  padding: clamp(24px, 6vw, 72px) 20px;
+  background: #f5f7f4;
+  color: #17231d;
+  font-family: Arial, sans-serif;
+}
+
+.backLink {
+  display: block;
+  width: min(100%, 620px);
+  margin: 0 auto 18px;
+  color: #236d4b;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.card {
+  width: min(100%, 620px);
+  margin: 0 auto;
+  padding: clamp(24px, 5vw, 42px);
+  border: 1px solid #e1e8e1;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 14px 40px rgb(23 35 29 / 7%);
+}
+
+.eyebrow {
+  margin: 0;
+  color: #236d4b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.card h1 {
+  margin: 12px 0;
+  font-size: clamp(28px, 5vw, 38px);
+  letter-spacing: -1.2px;
+}
+
+.intro {
+  margin: 0 0 28px;
+  color: #657168;
+  line-height: 1.6;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.form label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.form input,
+.form select,
+.form textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 12px;
+  border: 1px solid #cfd8d0;
+  border-radius: 9px;
+  background: #fff;
+  color: #17231d;
+  font: inherit;
+}
+
+.form textarea {
+  resize: vertical;
+}
+
+.form input:focus-visible,
+.form select:focus-visible,
+.form textarea:focus-visible,
+.submit:focus-visible,
+.backLink:focus-visible {
+  outline: 3px solid #8cc9a5;
+  outline-offset: 2px;
+}
+
+.help,
+.optional {
+  color: #657168;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.privacy {
+  margin: 0;
+  color: #657168;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.submit {
+  min-height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: #236d4b;
+  color: #fff;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.error,
+.success {
+  min-height: 20px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.error {
+  color: #a12c28;
+}
+
+.success {
+  color: #236d4b;
+}

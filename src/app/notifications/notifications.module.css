@@ -1,0 +1,328 @@
+.page {
+  min-height: 100vh;
+  padding: clamp(24px, 5vw, 64px) 20px;
+  background: #f5f7f4;
+  color: #23332a;
+}
+
+.pageHeader,
+.centre,
+.preferences,
+.loading {
+  width: min(900px, 100%);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.pageHeader {
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #57705d;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 42px);
+  letter-spacing: -0.035em;
+}
+
+.pageHeader > p:last-child {
+  margin: 8px 0 0;
+  color: #6a786e;
+  line-height: 1.6;
+}
+
+.centre,
+.preferences,
+.loading {
+  overflow: hidden;
+  border: 1px solid #dfe7df;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(27 55 35 / 5%);
+}
+
+.centreHeading,
+.preferencesHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e8ede8;
+}
+
+.centreHeading h2,
+.preferencesHeading h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.centreHeading p,
+.preferencesHeading > p {
+  margin: 5px 0 0;
+  color: #77837a;
+  font-size: 12px;
+}
+
+.secondaryButton,
+.saveButton {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #cddbd0;
+  border-radius: 8px;
+  background: #fff;
+  color: #31593a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: #f1f7f2;
+}
+
+.secondaryButton:disabled {
+  color: #8d9890;
+  cursor: default;
+}
+
+.notificationList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #edf0ed;
+}
+
+.notification:last-child {
+  border-bottom: 0;
+}
+
+.unread {
+  background: #f6faf6;
+}
+
+.statusMark {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  margin-top: 6px;
+  border: 1px solid #cbd6cc;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.unread .statusMark {
+  border-color: #16834c;
+  background: #16834c;
+}
+
+.notificationCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+.notificationTitle {
+  margin: 0;
+  color: #24352b;
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.5;
+}
+
+.notificationTitle span {
+  color: #55705c;
+}
+
+.notificationBody {
+  margin: 4px 0 0;
+  color: #69786e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.timestamp {
+  display: inline-block;
+  margin-top: 8px;
+  color: #7d8980;
+  font-size: 11px;
+}
+
+.openButton {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #287348;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.openButton:hover {
+  background: #eaf3ec;
+}
+
+.emptyState {
+  padding: 54px 24px;
+  text-align: center;
+}
+
+.emptyIcon {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e9f4ed;
+  color: #287348;
+  font-size: 19px;
+  font-weight: 750;
+}
+
+.emptyState h3 {
+  margin: 14px 0 6px;
+  font-size: 16px;
+}
+
+.emptyState p {
+  max-width: 440px;
+  margin: 0 auto;
+  color: #748177;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.preferences {
+  margin-top: 18px;
+  padding-bottom: 20px;
+}
+
+.preferencesHeading {
+  align-items: flex-end;
+}
+
+.preferencesHeading .eyebrow {
+  margin-bottom: 6px;
+}
+
+.preferences form {
+  padding: 8px 22px 0;
+}
+
+.preferenceList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 20px;
+}
+
+.preference {
+  display: flex;
+  min-height: 70px;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px 0;
+  cursor: pointer;
+}
+
+.preference input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  margin: 2px 0 0;
+  accent-color: #16834c;
+}
+
+.preference span {
+  display: grid;
+  gap: 4px;
+}
+
+.preference strong {
+  font-size: 13px;
+}
+
+.preference small {
+  color: #748177;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.saveButton {
+  margin-top: 8px;
+  border-color: #16834c;
+  background: #16834c;
+  color: #fff;
+}
+
+.saveButton:hover {
+  background: #126b3e;
+}
+
+.success {
+  margin: 14px 22px 0;
+  color: #287348;
+  font-size: 13px;
+}
+
+.loading {
+  padding: 28px;
+  color: #637269;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 600px) {
+  .page {
+    padding: 24px 12px 40px;
+  }
+
+  .centreHeading,
+  .preferencesHeading {
+    align-items: flex-start;
+    padding: 17px 15px;
+  }
+
+  .centreHeading {
+    flex-wrap: wrap;
+  }
+
+  .notification {
+    gap: 10px;
+    padding: 16px 13px;
+  }
+
+  .openButton {
+    padding: 0 7px;
+  }
+
+  .preferences form {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .preferenceList {
+    grid-template-columns: 1fr;
+  }
+}

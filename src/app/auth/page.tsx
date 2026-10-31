@@ -26,8 +26,11 @@ export default function AuthPage() {
   const configured = isSupabaseConfigured();
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("error") === "verification") {
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("error") === "verification") {
       queueMicrotask(() => setError("That email link could not be verified. Request a fresh link and try again."));
+    } else if (query.get("status") === "suspended") {
+      queueMicrotask(() => setError("This account is currently suspended. Contact TalantaLink support if you believe this is a mistake."));
     }
   }, []);
 

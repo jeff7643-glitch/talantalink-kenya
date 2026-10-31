@@ -1,0 +1,673 @@
+.page {
+  --ink: #17231d;
+  --muted: #748078;
+  --green: #236d4b;
+  --line: #e6e9e3;
+  min-height: 100vh;
+  color: var(--ink);
+  background: #f8f9f6;
+  font-family: Arial, sans-serif;
+}
+
+.topbar {
+  height: 72px;
+  padding: 0 clamp(20px, 6vw, 88px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: grid;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 850;
+  letter-spacing: -1.4px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.brand span {
+  color: var(--green);
+}
+
+.brand small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 7px;
+  letter-spacing: 1.5px;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 25px;
+}
+
+.topbar nav a,
+.textButton {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.loading {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.content {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 34px 28px 80px;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 44px clamp(24px, 5vw, 64px);
+  border-radius: 20px;
+  color: #fff;
+  background:
+    radial-gradient(ellipse at 87% 17%, rgba(147, 185, 112, .4), transparent 30%),
+    linear-gradient(118deg, #173e2c, #286e4a);
+}
+
+.eyebrow {
+  margin: 0;
+  color: #779581;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.hero .eyebrow {
+  color: #c1d9c6;
+}
+
+.hero h1 {
+  margin: 15px 0 11px;
+  font-size: clamp(36px, 5vw, 56px);
+  line-height: 1.03;
+  letter-spacing: -2.7px;
+}
+
+.hero h1 span {
+  color: #c4d9ac;
+}
+
+.hero > p:not(.eyebrow) {
+  max-width: 590px;
+  color: rgba(255, 255, 255, .78);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.heroButton,
+.secondaryButton,
+.uploadButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 7px;
+  color: #fff;
+  background: var(--green);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.heroButton {
+  margin-top: 14px;
+  color: #1d452f;
+  background: #e2edcf;
+}
+
+.heroButton span {
+  font-size: 16px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 22px 0 44px;
+}
+
+.metrics article {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.metrics article span,
+.metrics article strong {
+  display: block;
+}
+
+.metrics article span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.metrics article strong {
+  margin-top: 9px;
+  font-size: 27px;
+  letter-spacing: -.8px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 36px 0 17px;
+}
+
+.sectionHeading h2 {
+  margin: 6px 0 0;
+  font-size: 25px;
+  letter-spacing: -.7px;
+}
+
+.sectionHeading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.companyGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.companyCard {
+  min-width: 0;
+  padding: 21px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.companyHeading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 20px;
+}
+
+.logoFrame {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--green);
+  background: #f2f6ef;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.logoFrame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.companyHeading h3 {
+  margin: 5px 0 0;
+  font-size: 18px;
+}
+
+.verifiedBadge,
+.pendingBadge {
+  margin-left: auto;
+  padding: 6px 9px;
+  border-radius: 20px;
+  color: #1d6845;
+  background: #e9f5ed;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.pendingBadge {
+  color: #805a19;
+  background: #fff4d8;
+}
+
+.companyForm,
+.companyForm label {
+  display: grid;
+  gap: 8px;
+}
+
+.companyForm {
+  gap: 13px;
+}
+
+.companyForm label,
+.companyFilter {
+  color: #38453d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.companyForm input,
+.companyForm textarea,
+.companyFilter select,
+.statusForm select {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #dfe4dc;
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.companyForm textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.companyFormActions,
+.applicantActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.secondaryButton {
+  min-height: 36px;
+  padding: 0 13px;
+  font-size: 11px;
+}
+
+.uploadButton {
+  min-height: 36px;
+  color: var(--green);
+  border: 1px solid #cfe0d3;
+  background: #f5faf5;
+  font-size: 11px;
+}
+
+.uploadButton input {
+  display: none;
+}
+
+.verificationForm {
+  display: grid;
+  gap: 11px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #edf0ea;
+}
+
+.verificationForm label,
+.verificationFields label {
+  display: grid;
+  gap: 7px;
+  color: #38453d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.verificationForm input:not([type="file"]),
+.verificationForm input[type="file"],
+.verificationForm select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #dfe4dc;
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.verificationFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.verificationForm .pendingBadge {
+  width: fit-content;
+  margin-left: 0;
+}
+
+.textButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.textButton:disabled,
+.secondaryButton:disabled,
+.uploadButton:has(input:disabled) {
+  opacity: .58;
+  cursor: not-allowed;
+}
+
+.notice,
+.error {
+  width: 100%;
+  margin: 0;
+  color: #216544;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.error {
+  color: #a12c2c;
+}
+
+.section {
+  margin-top: 48px;
+}
+
+.companyFilter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.companyFilter select {
+  width: auto;
+  min-width: 160px;
+}
+
+.emptyState {
+  padding: 24px;
+  border: 1px dashed #d5ddd3;
+  border-radius: 11px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.listingTable {
+  display: grid;
+  gap: 12px;
+}
+
+.listingRow {
+  display: grid;
+  grid-template-columns: minmax(190px, .7fr) minmax(0, 1.6fr);
+  gap: 22px;
+  padding: 19px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.listingTitle {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listingTitle > strong {
+  font-size: 16px;
+}
+
+.listingTitle > span:not(.statusBadge),
+.listingTitle small,
+.applicantHeadline,
+.muted {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.statusBadge {
+  padding: 5px 8px;
+  border-radius: 16px;
+  color: #47574d;
+  background: #eef0ec;
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: capitalize;
+}
+
+.status_accepted {
+  color: #1b6542;
+  background: #e8f4eb;
+}
+
+.status_shortlisted {
+  color: #26578a;
+  background: #e9f2fb;
+}
+
+.status_rejected,
+.status_closed {
+  color: #8d3936;
+  background: #fbeceb;
+}
+
+.status_draft {
+  color: #75541c;
+  background: #fff4dc;
+}
+
+.applicantsColumn {
+  min-width: 0;
+}
+
+.applicantsColumn > strong {
+  display: block;
+  margin: 4px 0 11px;
+  font-size: 12px;
+}
+
+.applicantCard {
+  margin-top: 9px;
+  padding: 14px;
+  border: 1px solid #e8ece6;
+  border-radius: 10px;
+  background: #fcfdfb;
+}
+
+.applicantTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.applicantTop h4 {
+  margin: 5px 0 1px;
+  font-size: 14px;
+}
+
+.applicantHeadline {
+  margin: 4px 0 0;
+}
+
+.applicationMessage {
+  margin: 12px 0;
+  color: #39453d;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.documentLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.documentLinks a {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.applicantActions {
+  padding-top: 11px;
+  border-top: 1px solid #e9ede7;
+}
+
+.statusForm {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+}
+
+.statusForm select {
+  width: auto;
+  min-width: 122px;
+  padding: 8px;
+  font-size: 11px;
+}
+
+.activityList {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  list-style: none;
+}
+
+.activityList li {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #edf0ea;
+}
+
+.activityList li:last-child {
+  border-bottom: 0;
+}
+
+.activityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a956b;
+}
+
+.activityList li div {
+  display: grid;
+  gap: 4px;
+}
+
+.activityList li strong {
+  font-size: 12px;
+}
+
+.activityList li span:not(.activityDot),
+.activityList time {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .content {
+    padding: 22px 16px 56px;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-bottom: 35px;
+  }
+
+  .metrics article {
+    padding: 14px;
+  }
+
+  .metrics article strong {
+    font-size: 23px;
+  }
+
+  .companyGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .listingRow {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .companyFilter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 460px) {
+  .topbar {
+    height: 64px;
+    padding: 0 15px;
+  }
+
+  .topbar nav {
+    gap: 12px;
+  }
+
+  .topbar nav a {
+    font-size: 11px;
+  }
+
+  .hero {
+    padding: 32px 22px;
+    border-radius: 14px;
+  }
+
+  .hero h1 {
+    letter-spacing: -1.7px;
+  }
+
+  .applicantActions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .statusForm {
+    margin-left: 0;
+  }
+
+  .activityList li {
+    grid-template-columns: 10px 1fr;
+  }
+
+  .activityList time {
+    grid-column: 2;
+  }
+}

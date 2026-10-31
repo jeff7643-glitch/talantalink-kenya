@@ -13,6 +13,8 @@ type ProfileDetails = {
   bio: string;
   county_id: number | null;
   avatar_url: string | null;
+  avatar_path: string | null;
+  avatar_bucket: string;
 };
 
 const imageExtensions: Record<string, string> = {
@@ -74,15 +76,17 @@ export default function OnboardingForm({
     let uploadedPath: string | null = null;
     try {
       supabase = createSupabaseBrowserClient();
-      let avatarUrl = profile.avatar_url;
+      let avatarPath = profile.avatar_path;
+      let avatarBucket = profile.avatar_bucket;
       if (photo) {
         const extension = imageExtensions[photo.type];
         uploadedPath = `${account.id}/${crypto.randomUUID()}.${extension}`;
         const { error: uploadError } = await supabase.storage
-          .from("talantalink-avatars")
+          .from("talantalink-profile-media")
           .upload(uploadedPath, photo, { contentType: photo.type, cacheControl: "3600" });
         if (uploadError) throw uploadError;
-        avatarUrl = supabase.storage.from("talantalink-avatars").getPublicUrl(uploadedPath).data.publicUrl;
+        avatarPath = uploadedPath;
+        avatarBucket = "talantalink-profile-media";
       }
 
       const { error: profileError } = await supabase.from("profiles").update({
@@ -90,7 +94,9 @@ export default function OnboardingForm({
         headline,
         bio,
         county_id: countyId,
-        avatar_url: avatarUrl,
+        avatar_url: null,
+        avatar_path: avatarPath,
+        avatar_bucket: avatarBucket,
         onboarding_complete: true,
       }).eq("id", account.id).select("id").single();
       if (profileError) throw profileError;
@@ -100,7 +106,7 @@ export default function OnboardingForm({
     } catch (caught) {
       let message = caught instanceof Error ? caught.message : "Could not finish setting up your profile.";
       if (uploadedPath && supabase) {
-        const { error: cleanupError } = await supabase.storage.from("talantalink-avatars").remove([uploadedPath]);
+        const { error: cleanupError } = await supabase.storage.from("talantalink-profile-media").remove([uploadedPath]);
         if (cleanupError) message += ` The uploaded profile photo could not be removed: ${cleanupError.message}`;
       }
       setError(message);

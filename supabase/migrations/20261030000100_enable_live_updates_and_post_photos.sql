@@ -50,5 +50,5 @@ begin
       execute format('alter publication supabase_realtime add table public.%I', table_name);
     end if;
   end loop;
-end
+end;
 $$;
