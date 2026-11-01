@@ -1,6 +1,8 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { requireCompletedProfile } from "@/lib/auth/dal";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import BrandLink from "@/components/brand-link";
 import NotificationCentre, {
   type NotificationRecord,
 } from "./notification-centre";
@@ -118,10 +120,21 @@ export default async function NotificationsPage({
 }) {
   return (
     <main className={styles.page}>
+      <header className={styles.topbar}>
+        <BrandLink className={styles.brand}>
+          talanta<span>link</span><small>HOME OF TALENTS</small>
+        </BrandLink>
+        <Link className={styles.dashboardLink} href="/dashboard">
+          Back to dashboard <span aria-hidden="true">→</span>
+        </Link>
+      </header>
       <header className={styles.pageHeader}>
-        <p className={styles.eyebrow}>TALANTALINK UPDATES</p>
-        <h1>Notification centre</h1>
-        <p>Stay up to date with your community, applications and opportunities.</p>
+        <div>
+          <p className={styles.eyebrow}>YOUR TALANTALINK</p>
+          <h1>Notifications</h1>
+          <p>Stay close to the people, conversations and opportunities that move you forward.</p>
+        </div>
+        <span className={styles.heroMark} aria-hidden="true">✳</span>
       </header>
       <Suspense fallback={<div className={styles.loading} aria-busy="true">Loading your notifications…</div>}>
         <NotificationContent searchParams={searchParams} />

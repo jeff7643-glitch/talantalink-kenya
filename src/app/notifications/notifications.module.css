@@ -293,15 +293,323 @@
   clip-path: inset(50%);
 }
 
+.page {
+  min-height: 100vh;
+  padding: 0 24px 64px;
+  background:
+    radial-gradient(ellipse at 50% 0, rgb(21 115 76 / 7%), transparent 540px),
+    var(--canvas);
+  color: var(--ink);
+}
+
+.topbar {
+  display: flex;
+  width: min(1120px, 100%);
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.brand span {
+  color: var(--green);
+}
+
+.brand small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.dashboardLink {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.dashboardLink:hover {
+  border-color: var(--green);
+  background: var(--paper);
+}
+
+.pageHeader {
+  display: flex;
+  width: min(1040px, 100%);
+  min-height: 190px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 28px auto 22px;
+  padding: clamp(24px, 5vw, 42px);
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 88% 18%, rgb(142 201 147 / 30%), transparent 190px),
+    linear-gradient(118deg, #123426, #1d5b3e);
+  color: #fff;
+  box-shadow: 0 16px 38px rgb(22 57 37 / 13%);
+}
+
+.pageHeader .eyebrow {
+  color: #b7d7bd;
+}
+
+.pageHeader h1 {
+  font-size: clamp(32px, 5vw, 44px);
+  letter-spacing: -0.045em;
+}
+
+.pageHeader > div > p:last-child {
+  max-width: 560px;
+  margin: 10px 0 0;
+  color: #d3e2d7;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.heroMark {
+  display: grid;
+  width: 90px;
+  height: 90px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 26px;
+  background: rgb(255 255 255 / 9%);
+  color: #d6ebcf;
+  font-size: 52px;
+  transform: rotate(8deg);
+}
+
+.centre,
+.preferences,
+.loading {
+  width: min(1040px, 100%);
+  border-color: var(--line);
+  border-radius: 15px;
+  background: var(--paper);
+  box-shadow: 0 8px 26px rgb(22 38 29 / 5%);
+}
+
+.centreHeading,
+.preferencesHeading {
+  padding: 20px 24px;
+  border-color: var(--line);
+}
+
+.centreHeading h2,
+.preferencesHeading h2 {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.centreHeading p,
+.preferencesHeading > p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.secondaryButton {
+  border-color: var(--line);
+  background: var(--paper);
+  color: var(--green-dark);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--green);
+  background: var(--green-pale);
+}
+
+.notification {
+  gap: 16px;
+  padding: 20px 24px;
+  border-color: var(--line);
+  transition: background-color 160ms ease;
+}
+
+.unread {
+  background: color-mix(in srgb, var(--green-pale) 54%, var(--paper));
+}
+
+.statusMark {
+  border-color: var(--muted);
+  background: var(--paper);
+}
+
+.notificationTitle {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.notificationTitle span {
+  color: var(--green-dark);
+}
+
+.notificationBody,
+.emptyState p,
+.preference small {
+  color: var(--muted);
+}
+
+.timestamp {
+  color: var(--muted);
+}
+
+.openButton {
+  color: var(--green-dark);
+  transition: background-color 160ms ease;
+}
+
+.openButton:hover {
+  background: var(--green-pale);
+}
+
+.emptyState {
+  padding: 58px 24px 62px;
+}
+
+.emptyIcon {
+  background: var(--green-pale);
+  color: var(--green-dark);
+}
+
+.emptyState h3 {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.preferences {
+  margin-top: 20px;
+  padding-bottom: 22px;
+}
+
+.preferences form {
+  padding: 12px 24px 0;
+}
+
+.preferenceList {
+  gap: 10px;
+}
+
+.preference {
+  min-height: 78px;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.preference:hover {
+  border-color: color-mix(in srgb, var(--green) 48%, var(--line));
+  background: color-mix(in srgb, var(--green-pale) 35%, var(--paper));
+}
+
+.preference input {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+  accent-color: var(--green);
+}
+
+.preference strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.preference small {
+  font-size: 12px;
+}
+
+.saveButton {
+  min-width: 150px;
+  margin-top: 18px;
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.saveButton:hover {
+  background: var(--green-dark);
+  transform: translateY(-1px);
+}
+
+.success {
+  color: var(--green-dark);
+}
+
+.loading {
+  padding: 28px 24px;
+  color: var(--muted);
+}
+
 @media (max-width: 600px) {
   .page {
-    padding: 24px 12px 40px;
+    padding: 0 14px 40px;
+  }
+
+  .topbar {
+    min-height: 66px;
+  }
+
+  .brand {
+    font-size: 14px;
+  }
+
+  .dashboardLink {
+    min-height: 36px;
+    gap: 6px;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+
+  .pageHeader {
+    min-height: 160px;
+    margin: 18px auto;
+    border-radius: 14px;
+  }
+
+  .heroMark {
+    width: 54px;
+    height: 54px;
+    border-radius: 17px;
+    font-size: 32px;
   }
 
   .centreHeading,
   .preferencesHeading {
     align-items: flex-start;
-    padding: 17px 15px;
+    padding: 17px;
   }
 
   .centreHeading {
@@ -310,7 +618,7 @@
 
   .notification {
     gap: 10px;
-    padding: 16px 13px;
+    padding: 16px;
   }
 
   .openButton {
@@ -318,11 +626,15 @@
   }
 
   .preferences form {
-    padding-right: 15px;
-    padding-left: 15px;
+    padding-right: 17px;
+    padding-left: 17px;
   }
 
   .preferenceList {
     grid-template-columns: 1fr;
+  }
+
+  .preference {
+    min-height: 70px;
   }
 }
