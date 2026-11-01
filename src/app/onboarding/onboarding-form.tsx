@@ -4,7 +4,9 @@ import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthenticatedProfile } from "@/lib/auth/dal";
+import { getErrorMessage } from "@/lib/error-message";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import BrandLink from "@/components/brand-link";
 
 type County = { id: number; name: string };
 type ProfileDetails = {
@@ -104,7 +106,7 @@ export default function OnboardingForm({
       router.replace("/dashboard");
       router.refresh();
     } catch (caught) {
-      let message = caught instanceof Error ? caught.message : "Could not finish setting up your profile.";
+      let message = getErrorMessage(caught, "Could not finish setting up your profile.");
       if (uploadedPath && supabase) {
         const { error: cleanupError } = await supabase.storage.from("talantalink-profile-media").remove([uploadedPath]);
         if (cleanupError) message += ` The uploaded profile photo could not be removed: ${cleanupError.message}`;
@@ -119,7 +121,7 @@ export default function OnboardingForm({
   return (
     <main className="auth-page">
       <header className="auth-topbar">
-        <span className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></span>
+        <BrandLink className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
       </header>
       <section className="auth-card onboarding-card">
         <p className="eyebrow">YOUR TALENT, YOUR STORY</p>

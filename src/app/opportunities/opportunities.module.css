@@ -22,7 +22,9 @@
 }
 
 .brand {
-  display: grid;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   color: var(--market-ink);
   font-size: 23px;
   font-weight: 850;
@@ -31,7 +33,7 @@
   text-decoration: none;
 }
 
-.brand span,
+.brandCopy > span,
 .footer a span {
   color: var(--market-green);
 }

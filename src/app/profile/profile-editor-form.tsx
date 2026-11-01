@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import type { AuthenticatedProfile } from "@/lib/auth/dal";
+import { getErrorMessage } from "@/lib/error-message";
 import { kenyanTowns, normalizeKenyanPhone } from "@/lib/kenya";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import BrandLink from "@/components/brand-link";
 
 export type ProfileRecord = {
   id: string;
@@ -373,7 +375,7 @@ export default function ProfileEditorForm({
           setNotice(`Some uploaded files could not be cleaned up: ${cleanupError.message}`);
         }
       }
-      const message = caught instanceof Error ? caught.message : "Could not save your profile.";
+      const message = getErrorMessage(caught, "Could not save your profile.");
       setError(profileSaved ? `Your profile details were saved, but a portfolio or certificate update failed: ${message}` : message);
       setBusy(false);
     }
@@ -388,7 +390,7 @@ export default function ProfileEditorForm({
   return (
     <main className="auth-page profile-editor-page">
       <header className="auth-topbar">
-        <Link href="/" className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></Link>
+        <BrandLink className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
         <Link className="outline-button" href={`/talent/${account.id}`}>Preview profile</Link>
       </header>
       <section className="profile-editor-shell">

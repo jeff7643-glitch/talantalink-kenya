@@ -7,6 +7,7 @@ import { connection } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { signAvatarUrls, signStoragePaths } from "@/lib/storage/signed-urls";
 import ShareButton from "@/app/profile/share-button";
+import BrandLink from "@/components/brand-link";
 
 const loadProfile = cache(async (id: string) => {
   const supabase = await createSupabaseServerClient();
@@ -132,7 +133,7 @@ async function TalentProfileContent({ params }: RouteProps) {
   return (
     <main className="public-profile-page">
       <header className="public-profile-topbar">
-        <Link href="/" className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></Link>
+        <BrandLink className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
         <Link className="outline-button" href="/">Explore the community <span>→</span></Link>
       </header>
       <article className="public-profile">

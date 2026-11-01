@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { signAvatarUrls } from "@/lib/storage/signed-urls";
+import BrandLink from "@/components/brand-link";
 import ShareButton from "@/app/profile/share-button";
 
 export async function generateMetadata({
@@ -79,7 +80,7 @@ export default function SharedPostPage({ params }: { params: Promise<{ id: strin
   return (
     <main className="public-profile-page">
       <header className="public-profile-topbar">
-        <Link href="/" className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></Link>
+        <BrandLink className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
         <Link className="outline-button" href="/">Explore the community <span>→</span></Link>
       </header>
       <Suspense fallback={<div className="shared-post-card" aria-busy="true" />}>

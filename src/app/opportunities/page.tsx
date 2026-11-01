@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { requireCompletedProfile } from "@/lib/auth/dal";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import BrandLink from "@/components/brand-link";
 import OpportunitiesMarketplace from "./marketplace-client";
 import styles from "./opportunities.module.css";
 
@@ -99,7 +100,7 @@ export default function OpportunitiesPage() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link href="/" className={styles.brand}>talanta<span>link</span><small>HOME OF TALENTS</small></Link>
+        <BrandLink className={styles.brand} copyClassName={styles.brandCopy}>talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
         <Link href="/dashboard" className={styles.accountLink}>Your account <span>↗</span></Link>
       </header>
       <Suspense fallback={<div className={styles.loading} aria-busy="true"><span />Finding your next opportunity…</div>}>

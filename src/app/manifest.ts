@@ -11,9 +11,10 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#17231e",
     icons: [
       {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/talantalink-logo.jpg",
+        sizes: "512x512",
+        type: "image/jpeg",
+        purpose: "any",
       },
     ],
   };

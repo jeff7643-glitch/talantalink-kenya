@@ -14,6 +14,12 @@
   background: #fff;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .brand,
 .footer > a {
   color: #173a2b;
@@ -24,7 +30,7 @@
   text-decoration: none;
 }
 
-.brand span,
+.brandCopy > span,
 .footer > a span {
   color: #6ea44e;
 }

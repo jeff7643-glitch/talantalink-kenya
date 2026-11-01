@@ -13,6 +13,7 @@ import {
   setTalentVerification,
 } from "./actions";
 import styles from "./admin.module.css";
+import BrandLink from "@/components/brand-link";
 
 export const metadata = {
   title: "Administration",
@@ -242,7 +243,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/">talanta<span>link</span></Link>
+        <BrandLink className={styles.brand} copyClassName={styles.brandCopy}>talanta<span>link</span></BrandLink>
         <div className={styles.topbarRight}>
           <span className={styles.adminBadge}>ADMINISTRATOR</span>
           <span className={styles.adminName}>{admin.display_name}</span>

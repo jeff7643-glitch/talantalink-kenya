@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/dal";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { signAvatarUrls } from "@/lib/storage/signed-urls";
+import BrandLink from "@/components/brand-link";
 import EmployerDashboard, {
   type EmployerActivity,
   type EmployerApplication,
@@ -137,7 +138,7 @@ export default function EmployerDashboardPage() {
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link href="/" className={styles.brand}>talanta<span>link</span><small>HOME OF TALENTS</small></Link>
+        <BrandLink className={styles.brand} copyClassName={styles.brandCopy}>talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
         <nav><Link href="/opportunities">Marketplace</Link><Link href="/dashboard">Your account</Link></nav>
       </header>
       <Suspense fallback={<div className={styles.loading} aria-busy="true">Loading your hiring dashboard...</div>}>

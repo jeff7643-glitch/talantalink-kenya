@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import BrandLink from "@/components/brand-link";
 
 type AuthMode = "sign-in" | "sign-up" | "forgot-password";
 type MemberRole = "talent" | "employer" | "recruiter";
@@ -127,10 +128,9 @@ export default function AuthPage() {
   return (
     <main className="auth-page">
       <header className="auth-topbar">
-        <Link className="brand" href="/">
-          <span className="brand-shield"><span /><span /><span /></span>
-          <span className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></span>
-        </Link>
+        <BrandLink className="brand">
+          talanta<span>link</span><small>HOME OF TALENTS</small>
+        </BrandLink>
         <Link href="/" className="auth-back">Back to home <span>→</span></Link>
       </header>
       <section className="auth-card">

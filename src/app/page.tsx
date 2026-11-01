@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { signAvatarUrls } from "@/lib/storage/signed-urls";
+import BrandLink from "@/components/brand-link";
 
 type IconName =
   | "home"
@@ -1777,10 +1778,9 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <Link className="brand" href="/" onClick={() => setSection("Home")} aria-label="TalantaLink home">
-          <span className="brand-shield"><Image src="/kenya-flag.svg" alt="" width={35} height={39} priority /></span>
-          <span className="brand-wordmark">talanta<span>link</span><small>HOME OF TALENTS</small></span>
-        </Link>
+        <BrandLink className="brand" onClick={() => setSection("Home")}>
+          talanta<span>link</span><small>HOME OF TALENTS</small>
+        </BrandLink>
         <label className="global-search"><Icon name="search" size={17} /><input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search talent, skills, opportunities..." aria-label="Search TalantaLink" /><kbd>Ctrl K</kbd></label>
         <nav className="desktop-nav" aria-label="Primary navigation">
           {navItems.filter((item) => ["Home", "My Network", "Jobs", "Messages"].includes(item.label)).map((item) => (

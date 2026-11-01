@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { signAvatarUrls } from "@/lib/storage/signed-urls";
 import styles from "./discover.module.css";
+import BrandLink from "@/components/brand-link";
 
 const PAGE_SIZE = 12;
 const MAX_EXPERIENCE = 80;
@@ -161,7 +162,7 @@ async function DiscoverContent({ searchParams }: { searchParams: Promise<SearchP
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
-        <Link className={styles.brand} href="/">talanta<span>link</span><small>HOME OF TALENTS</small></Link>
+        <BrandLink className={styles.brand} copyClassName={styles.brandCopy}>talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
         <Link className={styles.topLink} href="/auth">Join TalantaLink <span aria-hidden="true">↗</span></Link>
       </header>
 
@@ -290,7 +291,7 @@ export default function DiscoverPage({ searchParams }: { searchParams: Promise<S
       fallback={
         <main className={styles.page} aria-busy="true">
           <header className={styles.topbar}>
-            <Link className={styles.brand} href="/">talanta<span>link</span><small>HOME OF TALENTS</small></Link>
+            <BrandLink className={styles.brand} copyClassName={styles.brandCopy}>talanta<span>link</span><small>HOME OF TALENTS</small></BrandLink>
             <span className={styles.topLink}>Join TalantaLink</span>
           </header>
           <section className={styles.hero}>
