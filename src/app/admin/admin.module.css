@@ -525,6 +525,8 @@
 }
 
 .reviewList {
+  max-height: 540px;
+  overflow-y: auto;
   padding: 0 16px;
 }
 

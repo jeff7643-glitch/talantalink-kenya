@@ -121,7 +121,7 @@ export default function StadiumExperience({
             src={stadiumPhotos[activePhotoIndex].src}
             alt={stadiumPhotos[activePhotoIndex].alt}
             fill
-            priority
+            loading="eager"
             sizes="(max-width: 700px) 100vw, 1320px"
           />
           <div className={styles.photoShade} />

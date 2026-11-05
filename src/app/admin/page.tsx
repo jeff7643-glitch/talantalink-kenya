@@ -88,7 +88,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
     { count: openSignalCount, error: signalCountError },
     { count: liveOpportunityCount, error: opportunityCountError },
     { data: profiles, error: profilesError },
-    { data: accountStatuses, error: statusesError },
+    { count: pendingTalentCount, error: pendingTalentCountError },
     { data: companies, error: companiesError },
     { data: verificationDocuments, error: verificationDocumentsError },
     { data: contentReports, error: contentReportsError },
@@ -96,7 +96,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
     { data: trustSignals, error: trustSignalsError },
     { data: opportunities, error: opportunitiesError },
     { data: categories, error: categoriesError },
-    { data: talents, error: talentsError },
+    { data: talentVerificationQueue, error: talentVerificationError },
     { data: auditEvents, error: auditError },
   ] = await Promise.all([
     supabase.from("profiles").select("id", { count: "exact", head: true }),
@@ -114,9 +114,11 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
       : supabase.from("profiles")
         .select("id,display_name,role,is_verified,created_at")
         .order("created_at", { ascending: false }).limit(60)),
-    supabase.from("admin_account_status")
-      .select("user_id,is_suspended,suspension_reason,updated_at"),
-    supabase.from("companies")
+      supabase.from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "talent")
+        .eq("is_verified", false),
+      supabase.from("companies")
       .select("id,name,owner_id,is_verified,verification_requested_at,created_at")
       .order("verification_requested_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false }).limit(40),
@@ -137,7 +139,12 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
       .select("id,title,status,company_id,created_at")
       .order("created_at", { ascending: false }).limit(40),
     supabase.from("talent_categories").select("id,name").order("name"),
-    supabase.from("talents").select("category_id"),
+    supabase.from("profiles")
+      .select("id,display_name,is_verified,created_at")
+      .eq("role", "talent")
+      .eq("is_verified", false)
+      .order("created_at", { ascending: false })
+      .limit(40),
     supabase.from("admin_audit_log")
       .select("id,actor_id,action,target_type,target_id,created_at")
       .order("created_at", { ascending: false }).limit(12),
@@ -150,7 +157,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
   message(signalCountError, "Could not count suspicious-link signals");
   message(opportunityCountError, "Could not count live listings");
   message(profilesError, "Could not load registered accounts");
-  message(statusesError, "Could not load account status");
+  message(pendingTalentCountError, "Could not count talent verification requests");
   message(companiesError, "Could not load employer profiles");
   message(verificationDocumentsError, "Could not load employer verification evidence");
   message(contentReportsError, "Could not load content reports");
@@ -158,10 +165,28 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
   message(trustSignalsError, "Could not load suspicious-link signals");
   message(opportunitiesError, "Could not load job listings");
   message(categoriesError, "Could not load talent categories");
-  message(talentsError, "Could not load talent category totals");
+  message(talentVerificationError, "Could not load talent verification requests");
   message(auditError, "Could not load the moderation audit");
 
   const accounts = profiles ?? [];
+  const accountIds = accounts.map((profile) => profile.id);
+  const { data: accountStatuses, error: statusesError } = accountIds.length
+    ? await supabase.from("admin_account_status")
+      .select("user_id,is_suspended,suspension_reason,updated_at")
+      .in("user_id", accountIds)
+    : { data: [], error: null };
+  message(statusesError, "Could not load account status");
+
+  const categoryTalentCounts = await Promise.all((categories ?? []).map(async (category) => {
+    const { count, error } = await supabase
+      .from("talents")
+      .select("id", { count: "exact", head: true })
+      .eq("category_id", category.id);
+    message(error, `Could not count talent in ${category.name}`);
+    return [category.id, count ?? 0] as const;
+  }));
+  const talentCounts = new Map(categoryTalentCounts);
+
   const profileIds = [...new Set([
     ...accounts.map((profile) => profile.id),
     ...(contentReports ?? []).flatMap((report) => [report.reporter_id, report.target_type === "profile" ? report.target_id : ""]),
@@ -210,10 +235,6 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
   const commentContent = new Map((reportedComments ?? []).map((comment) => [comment.id, comment.content]));
   const opportunityTitles = new Map((reportedOpportunities ?? []).map((opportunity) => [opportunity.id, opportunity.title]));
   const statusByUser = new Map((accountStatuses ?? []).map((status) => [status.user_id, status]));
-  const talentCounts = new Map<string, number>();
-  for (const talent of talents ?? []) {
-    talentCounts.set(talent.category_id, (talentCounts.get(talent.category_id) ?? 0) + 1);
-  }
   const flaggedAccountCounts = new Map<string, number>();
   for (const report of accountReports ?? []) {
     flaggedAccountCounts.set(report.reported_user_id, (flaggedAccountCounts.get(report.reported_user_id) ?? 0) + 1);
@@ -239,6 +260,17 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
     return { ...document, signed_url: data?.signedUrl ?? null };
   }));
   const verificationByCompany = new Map(signedVerificationDocuments.map((document) => [document.company_id, document]));
+  const companyNames = new Map((companies ?? []).map((company) => [company.id, company.name]));
+  const missingCompanyIds = [...new Set((opportunities ?? [])
+    .map((opportunity) => opportunity.company_id)
+    .filter((companyId) => !companyNames.has(companyId)))];
+  const { data: listingCompanies, error: listingCompaniesError } = missingCompanyIds.length
+    ? await supabase.from("companies").select("id,name").in("id", missingCompanyIds)
+    : { data: [], error: null };
+  message(listingCompaniesError, "Could not load organizations for recent listings");
+  for (const company of listingCompanies ?? []) {
+    companyNames.set(company.id, company.name);
+  }
 
   return (
     <main className={styles.page}>
@@ -275,7 +307,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
               <h1>Administrator dashboard</h1>
               <p>Review platform health and handle account, content, and marketplace operations.</p>
             </div>
-            <div className={styles.lastUpdated}>LIVE OVERVIEW <span>•</span> {new Date().toLocaleDateString("en", { dateStyle: "medium" })}</div>
+            <div className={styles.lastUpdated}>OVERVIEW SNAPSHOT <span>•</span> {new Date().toLocaleDateString("en", { dateStyle: "medium" })}</div>
           </section>
 
           <section className={styles.metrics} aria-label="Platform statistics">
@@ -298,7 +330,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
               </form>
               <div className={styles.tableScroller}>
                 <table className={styles.table}>
-                  <thead><tr><th>Member</th><th>Account type</th><th>Joined</th><th>Safety</th><th>Account controls</th></tr></thead>
+                  <thead><tr><th>Member</th><th>Account type</th><th>Joined</th><th>Safety</th><th>Verification</th><th>Account controls</th></tr></thead>
                   <tbody>
                     {accounts.map((profile) => {
                       const status = statusByUser.get(profile.id);
@@ -309,6 +341,13 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
                           <td><span className={styles.roleTag}>{profile.role}</span></td>
                           <td>{dateLabel(profile.created_at)}</td>
                           <td><span className={`${styles.status} ${suspended ? styles.statusDanger : styles.statusGood}`}>{suspended ? "Suspended" : "Active"}</span></td>
+                          <td>{profile.role === "talent"
+                            ? <form action={setTalentVerification}>
+                              <input type="hidden" name="userId" value={profile.id} />
+                              <input type="hidden" name="verified" value={String(!profile.is_verified)} />
+                              <button className={profile.is_verified ? styles.buttonSecondary : styles.buttonPrimary} type="submit">{profile.is_verified ? "Revoke" : "Verify"}</button>
+                            </form>
+                            : <span className={styles.muted}>Not applicable</span>}</td>
                           <td>
                             {profile.role === "administrator"
                               ? <span className={styles.muted}>Protected administrator</span>
@@ -323,7 +362,7 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
                         </tr>
                       );
                     })}
-                    {!accounts.length && <tr><td className={styles.empty} colSpan={5}>No member accounts found.</td></tr>}
+                    {!accounts.length && <tr><td className={styles.empty} colSpan={6}>No member accounts found.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -337,19 +376,19 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
             </div>
             <div className={styles.twoColumn}>
               <div className={styles.panel}>
-                <div className={styles.panelHeading}><h3>Talent profiles</h3><span>{accounts.filter((profile) => profile.role === "talent").length} recent</span></div>
+                <div className={styles.panelHeading}><h3>Talent profiles awaiting review</h3><span>Showing {talentVerificationQueue?.length ?? 0} of {pendingTalentCount ?? 0}</span></div>
                 <div className={styles.reviewList}>
-                  {accounts.filter((profile) => profile.role === "talent").slice(0, 16).map((profile) => (
+                  {(talentVerificationQueue ?? []).map((profile) => (
                     <div className={styles.reviewRow} key={profile.id}>
-                      <div><strong>{profile.display_name}</strong><small>Talent member</small></div>
+                      <div><strong>{profile.display_name}</strong><small>Joined {dateLabel(profile.created_at)}</small></div>
                       <form action={setTalentVerification}>
                         <input type="hidden" name="userId" value={profile.id} />
-                        <input type="hidden" name="verified" value={String(!profile.is_verified)} />
-                        <button className={profile.is_verified ? styles.buttonSecondary : styles.buttonPrimary} type="submit">{profile.is_verified ? "Revoke" : "Verify"}</button>
+                        <input type="hidden" name="verified" value="true" />
+                        <button className={styles.buttonPrimary} type="submit">Verify</button>
                       </form>
                     </div>
                   ))}
-                  {!accounts.some((profile) => profile.role === "talent") && <p className={styles.empty}>No talent profiles to review.</p>}
+                  {!talentVerificationQueue?.length && <p className={styles.empty}>No unverified talent profiles are waiting for review.</p>}
                 </div>
               </div>
               <div className={styles.panel}>
@@ -493,10 +532,9 @@ async function AdminContent({ searchParams }: { searchParams: Promise<AdminSearc
                   <thead><tr><th>Listing</th><th>Organization</th><th>Created</th><th>Status</th><th>Update status</th></tr></thead>
                   <tbody>
                     {(opportunities ?? []).map((opportunity) => {
-                      const company = companies?.find((item) => item.id === opportunity.company_id);
                       return <tr key={opportunity.id}>
                         <td><strong>{opportunity.title}</strong></td>
-                        <td>{company?.name ?? "Organization"}</td>
+                        <td>{companyNames.get(opportunity.company_id) ?? "Organization"}</td>
                         <td>{dateLabel(opportunity.created_at)}</td>
                         <td><span className={`${styles.status} ${opportunity.status === "published" ? styles.statusGood : styles.statusNeutral}`}>{opportunity.status}</span></td>
                         <td><form action={setOpportunityStatus} className={styles.inlineForm}>
