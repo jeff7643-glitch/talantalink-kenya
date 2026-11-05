@@ -1805,6 +1805,7 @@ export default function Home() {
           <nav className="side-nav" aria-label="Main navigation">
             <p className="nav-label">YOUR SPACE</p>
             <Link className="nav-item" href="/discover"><Icon name="search" size={18} /><span>Discover talent</span></Link>
+            <Link className="nav-item" href="/stadium"><Icon name="map" size={18} /><span>Talanta Stadium</span></Link>
             <Link className="nav-item" href="/opportunities"><Icon name="briefcase" size={18} /><span>Opportunity marketplace</span></Link>
             <Link className="nav-item" href="/inbox"><Icon name="message" size={18} /><span>Private inbox</span></Link>
             {navItems.filter((item) => item.label === "Investors" || item.label === "Campaigns" || item.label === "Saved posts").map((item) => <button key={item.label} className={`nav-item ${section === item.label ? "nav-active" : ""}`} onClick={() => setSection(item.label)}><Icon name={item.icon} size={18} /><span>{item.label === "Investors" ? "Funding & partners" : item.label}</span></button>)}
